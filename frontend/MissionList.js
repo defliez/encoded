@@ -75,7 +75,6 @@ export default function MissionList({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Button title="View Map" onPress={() => navigation.navigate('Map')} />
       <FlatList
         data={missions}
         keyExtractor={(item) => item.id}

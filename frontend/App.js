@@ -1,19 +1,19 @@
 // App.js
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import MissionList from './MissionList';
 import MapScreen from './MapScreen';
 
-const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
 
 export default function App() {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Missions">
-        <Stack.Screen name="Missions" component={MissionList} />
-        <Stack.Screen name="Map" component={MapScreen} />
-      </Stack.Navigator>
+      <Tab.Navigator initialRouteName="Map">
+        <Tab.Screen name="Missions" component={MissionList} />
+        <Tab.Screen name="Map" component={MapScreen} />
+      </Tab.Navigator>
     </NavigationContainer>
   );
 }
