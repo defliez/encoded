@@ -4,7 +4,7 @@ import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { supabase } from './supabaseClient';
 
-export default function MapScreen() {
+export default function MapScreen({ navigation }) {
   const [location, setLocation] = useState(null);
   const [missions, setMissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +55,7 @@ export default function MapScreen() {
             coordinate={{ latitude: mission.lat, longitude: mission.lon }}
             title={mission.title}
             description={mission.description}
+            onPress={() => navigation.navigate('MissionDetails', { mission, playerId: '00000000-0000-0000-0000-000000000000' })} // Replace playerId later
           />
         ))}
       </MapView>
@@ -70,4 +71,5 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+
 
