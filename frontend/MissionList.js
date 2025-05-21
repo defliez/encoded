@@ -4,7 +4,7 @@ import { View, Text, FlatList, StyleSheet, Button, ActivityIndicator } from 'rea
 import * as Location from 'expo-location';
 import { supabase } from './supabaseClient';
 
-export default function MissionList() {
+export default function MissionList({ navigation }) {
   const [missions, setMissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState(null);
@@ -75,6 +75,7 @@ export default function MissionList() {
 
   return (
     <View style={styles.container}>
+      <Button title="View Map" onPress={() => navigation.navigate('Map')} />
       <FlatList
         data={missions}
         keyExtractor={(item) => item.id}
