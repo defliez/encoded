@@ -5,102 +5,138 @@ import * as Location from 'expo-location';
 import { supabase } from './supabaseClient';
 
 export default function MissionList({ navigation }) {
-  const [missions, setMissions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [location, setLocation] = useState(null);
+    const [missions, setMissions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [location, setLocation] = useState(null);
+    const [participations, setParticipations] = useState([]);
 
-  useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Location permission denied');
-        return;
-      }
+    const MOCK_PLAYER_ID = '00000000-0000-0000-0000-000000000000';
 
-      const loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc);
-    })();
-  }, []);
+    useEffect(() => {
+        (async () => {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                alert('Location permission denied');
+                return;
+            }
 
-  useEffect(() => {
-    if (!location) return;
+            const loc = await Location.getCurrentPositionAsync({});
+            setLocation(loc);
+        })();
+    }, []);
 
-    const fetchMissions = async () => {
-      const { data, error } = await supabase.from('missions').select('*');
-      if (error) console.error(error);
+    useEffect(() => {
+        if (!location) return;
 
-      if (data) {
-        const missionsWithDistance = data.map((mission) => {
-          const distance = getDistanceFromLatLonInKm(
-            location.coords.latitude,
-            location.coords.longitude,
-            mission.lat,
-            mission.lon
-          );
-          return { ...mission, distance };
-        });
-        setMissions(missionsWithDistance);
-        setLoading(false);
-      }
+        const fetchMissions = async () => {
+            const { data, error } = await supabase.from('missions').select('*');
+            if (error) console.error(error);
+
+            if (data) {
+                const missionsWithDistance = data.map((mission) => {
+                    const distance = getDistanceFromLatLonInKm(
+                        location.coords.latitude,
+                        location.coords.longitude,
+                        mission.lat,
+                        mission.lon
+                    );
+                    return { ...mission, distance };
+                });
+                setMissions(missionsWithDistance);
+            }
+            setLoading(false);
+        };
+
+        fetchMissions();
+
+        const interval = setInterval(fetchMissions, 10000);
+        return () => clearInterval(interval);
+    }, [location]);
+
+    useEffect(() => {
+        const fetchParticipations = async () => {
+            const { data, error } = await supabase
+                .from('mission_participation')
+                .select('mission_id')
+                .eq('player_id', MOCK_PLAYER_ID)
+                .is('completed_at', null);
+
+            if (!error && data) setParticipations(data.map((p) => p.mission_id));
+        };
+
+        fetchParticipations();
+    }, []);
+
+    const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
+        const R = 6371;
+        const dLat = deg2rad(lat2 - lat1);
+        const dLon = deg2rad(lon2 - lon1);
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(deg2rad(lat1)) *
+            Math.cos(deg2rad(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     };
 
-    fetchMissions();
-  }, [location]);
+    const deg2rad = (deg) => deg * (Math.PI / 180);
 
-  const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
-    const R = 6371;
-    const dLat = deg2rad(lat2 - lat1);
-    const dLon = deg2rad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(deg2rad(lat1)) *
-        Math.cos(deg2rad(lat2)) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
+    const renderItem = ({ item }) => {
+        const alreadyStarted = participations.includes(item.id);
 
-  const deg2rad = (deg) => deg * (Math.PI / 180);
+        return (
+            <View style={styles.missionBox}>
+            <Text style={styles.title}>{item.title}</Text>
+            <Text>{item.description}</Text>
+            <Text>📍 {item.distance.toFixed(2)} km away</Text>
+            {alreadyStarted ? (
+                <Text style={{ color: '#999', marginTop: 6 }}>Already in progress</Text>
+            ) : (
+                <Button
+                title="Start Mission"
+                onPress={() =>
+                    navigation.navigate('MissionDetails', {
+                        mission: item,
+                        playerId: MOCK_PLAYER_ID,
+                    })
+                }
+                />
+            )}
+            </View>
+        );
+    };
 
-  const renderItem = ({ item }) => (
-    <View style={styles.missionBox}>
-      <Text style={styles.title}>{item.title}</Text>
-      <Text>{item.description}</Text>
-      <Text>📍 {item.distance.toFixed(2)} km away</Text>
-      <Button title="Start Mission" onPress={() => alert('Start mission logic here')} />
-    </View>
-  );
+    if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
 
-  if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
-
-  return (
-    <View style={styles.container}>
-      <FlatList
-        data={missions}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-      />
-    </View>
-  );
+    return (
+        <View style={styles.container}>
+            <FlatList
+                data={missions}
+                keyExtractor={(item) => item.id}
+                renderItem={renderItem}
+            />
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#111',
-  },
-  missionBox: {
-    backgroundColor: '#222',
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 10,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 6,
-  },
+    container: {
+        flex: 1,
+        padding: 20,
+        backgroundColor: '#111',
+    },
+    missionBox: {
+        backgroundColor: '#222',
+        padding: 16,
+        marginBottom: 12,
+        borderRadius: 10,
+    },
+    title: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#fff',
+        marginBottom: 6,
+    },
 });
 
