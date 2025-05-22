@@ -14,10 +14,6 @@
 **Database**:
 - Supabase
 
-        - time window to start mission
-        - rewards based on time completion
-    - fixed amounts of specific missions
-
 ---
 
 ## MVP features
