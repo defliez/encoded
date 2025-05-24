@@ -8,6 +8,7 @@ import MapScreen from './MapScreen';
 import MissionList from './MissionList';
 import MissionDetails from './MissionDetails';
 import CurrentMission from './CurrentMission';
+import NPCChat from './NPCChat';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -17,6 +18,7 @@ function MapStack() {
         <Stack.Navigator>
             <Stack.Screen name="MapScreen" component={MapScreen} options={{ title: 'Map' }} />
             <Stack.Screen name="MissionDetails" component={MissionDetails} options={{ title: 'Mission Details' }} />
+            <Stack.Screen name="NPCChat" component={NPCChat} options={{ title: 'Contact NPC' }} />
         </Stack.Navigator>
     );
 }
