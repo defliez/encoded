@@ -34,7 +34,7 @@ export default function MapScreen({ navigation }) {
   }, []);
 
   if (!location || loading) {
-    return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
+    return <ActivityIndicator style={{ flex: 1 }} size="large" color="black" />;
   }
 
   return (
