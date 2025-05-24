@@ -85,26 +85,24 @@ export default function MissionList({ navigation }) {
     const renderItem = ({ item }) => {
         const alreadyStarted = participations.includes(item.id);
 
-        return (
-            <View style={styles.missionBox}>
-            <Text style={styles.title}>{item.title}</Text>
-            <Text>{item.description}</Text>
-            <Text>📍 {item.distance.toFixed(2)} km away</Text>
-            {alreadyStarted ? (
-                <Text style={{ color: '#999', marginTop: 6 }}>Already in progress</Text>
-            ) : (
-                <Button
-                title="Start Mission"
-                onPress={() =>
-                    navigation.navigate('MissionDetails', {
-                        mission: item,
-                        playerId: MOCK_PLAYER_ID,
-                    })
-                }
-                />
-            )}
-            </View>
-        );
+        if (!alreadyStarted) {
+            return (
+                <View style={styles.missionBox}>
+                    <Text style={styles.title}>{item.title}</Text>
+                    <Text>{item.description}</Text>
+                    <Text>📍 {item.distance.toFixed(2)} km away</Text>
+                    <Button
+                        title="Start Mission"
+                        onPress={() =>
+                            navigation.navigate('MissionDetails', {
+                                mission: item,
+                                playerId: MOCK_PLAYER_ID,
+                            })
+                        }
+                    />
+                </View>
+            )
+        }
     };
 
     if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
