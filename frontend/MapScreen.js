@@ -37,25 +37,23 @@ export default function MapScreen({ navigation }) {
                 console.error(participationError);
                 return;
             }
+          
+            // let query = supabase.from('missions').select('*');
+            // 
+            // query = query.not('id', 'in', `(${(participations?.map((p) => p.mission_id) || [] ).join(',')})`);
+            //
+           
+            const { data: filtered, error: filteredError } = await supabase
+                .from('missions')
+                .select('*')
+                .not('id', 'in', `(${(participations?.map((p) => p.mission_id) || [] )
+                .join(',')})`);
 
-            const startedMissionIds = participations.map((p) => p.mission_id);
-            console.log('startedMissionIds:', startedMissionIds);
-
-            let query = supabase.from('missions').select('*');
-            console.log('query1:', query);
-
-            if (startedMissionIds.length > 0) {
-                query = query.not('id', 'in', `(${startedMissionIds.join(',')})`);
-            }
-            console.log('query:', query);
-
-            const { data: filtered, error: filteredError } = await query;
             const p = filtered.map((d) => d.id) || [];
-            console.log('final:', p);
-
+            
             if (filteredError) console.error(filteredError);
             if (filtered) setMissions(filtered);
-            console.log("missions:", missions);
+         
             setLoading(false);
         };
 
