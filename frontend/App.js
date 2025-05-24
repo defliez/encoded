@@ -23,13 +23,22 @@ function MapStack() {
     );
 }
 
+function ActiveMissionsStack() {
+    return (
+        <Stack.Navigator>
+            <Stack.Screen name="ActiveMissionsScreen" component={ActiveMissionsScreen} options={{ title: 'Active Missions' }} />
+            <Stack.Screen name="MissionDetails" component={MissionDetails} options={{ title: 'Mission Details' }} />
+        </Stack.Navigator>
+    );
+}
+
 export default function App() {
     return (
         <NavigationContainer>
             <Tab.Navigator initialRouteName="Map">
                 <Tab.Screen name="Map" component={MapStack} options={{ headerShown: false }} />
                 <Tab.Screen name="Missions" component={MissionList} />
-                <Tab.Screen name="Active Missions" component={ActiveMissionsScreen} />
+                <Tab.Screen name="Active Missions" component={ActiveMissionsStack} options={{ headerShown: false }} />
             </Tab.Navigator>
         </NavigationContainer>
     );

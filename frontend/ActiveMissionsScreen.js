@@ -5,7 +5,7 @@ import { supabase } from './supabaseClient';
 
 const MOCK_PLAYER_ID = '00000000-0000-0000-0000-000000000000';
 
-export default function ActiveMissionsScreen() {
+export default function ActiveMissionsScreen({ navigation }) {
     const [mission, setMission] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -71,7 +71,7 @@ export default function ActiveMissionsScreen() {
                         title="Mission Details"
                         onPress={() =>
                             navigation.navigate('MissionDetails', {
-                                mission: item,
+                                mission: item.missions,
                                 playerId: MOCK_PLAYER_ID,
                             })
                         }
