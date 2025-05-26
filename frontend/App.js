@@ -23,6 +23,16 @@ function MapStack() {
     );
 }
 
+function MissionsStack() {
+    return (
+        <Stack.Navigator>
+            <Tab.Screen name="Missions" component={MissionList} options={{ title: 'Missions' }} />
+            <Stack.Screen name="MissionDetails" component={MissionDetails} options={{ title: 'Mission Details' }} />
+            <Stack.Screen name="NPCChat" component={NPCChat} options={{ title: 'Contact NPC' }} />
+        </Stack.Navigator>
+    );
+}
+
 function ActiveMissionsStack() {
     return (
         <Stack.Navigator>
@@ -37,7 +47,7 @@ export default function App() {
         <NavigationContainer>
             <Tab.Navigator initialRouteName="Map">
                 <Tab.Screen name="Map" component={MapStack} options={{ headerShown: false }} />
-                <Tab.Screen name="Missions" component={MissionList} />
+                <Tab.Screen name="Missions" component={MissionsStack} options={{ headerShown: false }} />
                 <Tab.Screen name="Active Missions" component={ActiveMissionsStack} options={{ headerShown: false }} />
             </Tab.Navigator>
         </NavigationContainer>
