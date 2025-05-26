@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { supabase } from './supabaseClient';
+import { useFocusEffect } from '@react-navigation/native';
 
 function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
@@ -21,64 +22,72 @@ function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
 export default function MapScreen({ navigation }) {
     const [location, setLocation] = useState(null);
     const [missions, setMissions] = useState([]);
-    const [acceptedMissionIds, setAcceptedMissionIds] = useState([]);
+    const [acceptedMissions, setAcceptedMissions] = useState({});
     const [loading, setLoading] = useState(true);
 
     const MOCK_PLAYER_ID = '00000000-0000-0000-0000-000000000000';
     const ACCEPT_DISTANCE_METERS = 100;
 
-    useEffect(() => {
-        (async () => {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                alert('Location permission denied');
-                return;
-            }
+    useFocusEffect(
+        useCallback(() => {
+            let isActive = true;
 
-            const loc = await Location.getCurrentPositionAsync({});
-            setLocation(loc);
-        })();
-    }, []);
+            const fetchLocationAndMissions = async () => {
+                try {
+                    setLoading(true);
 
-    useEffect(() => {
-        const fetchMissions = async () => {
-            const { data: participations, error: participationError } = await supabase
-                .from('mission_participation')
-                .select('mission_id')
-                .eq('player_id', MOCK_PLAYER_ID)
-                .is('completed_at', null);
+                    const { status } = await Location.requestForegroundPermissionsAsync();
+                    if (status !== 'granted') {
+                        alert('Location permission denied');
+                        return;
+                    }
+                    const loc = await Location.getCurrentPositionAsync({});
+                    if (isActive) setLocation(loc);
 
-            if (participationError) {
-                console.error(participationError);
-                return;
-            }
+                    const { data: allMissions, error: missionsError } = await supabase
+                        .from('missions')
+                        .select('*');
+                    if (missionsError) throw missionsError;
 
-            const acceptedIds = participations?.map((p) => p.mission_id) || [];
-            setAcceptedMissionIds(acceptedIds);
+                    const { data: participations, error: participationError } = await supabase
+                        .from('mission_participation')
+                        .select('mission_id, status, completed_at')
+                        .eq('player_id', MOCK_PLAYER_ID);
+                    if (participationError) throw participationError;
 
-            const excludedIdsString = acceptedIds.join(',');
-            const { data: filtered, error: filteredError } = await supabase
-                .from('missions')
-                .select('*')
-                .not('id', 'in', `(${excludedIdsString})`);
+                    const participationMap = {};
+                    participations.forEach((p) => {
+                        participationMap[p.mission_id] = p;
+                    });
 
-            if (filteredError) console.error(filteredError);
+                    const filtered = allMissions.filter((mission) => {
+                        const p = participationMap[mission.id];
 
-            const { data: acceptedMissions, error: acceptedMissionsError } = await supabase
-                .from('missions')
-                .select('*')
-                .in('id', acceptedIds);
+                        if (!p) return true;
+                        if (!p.completed_at) return true;
+                        if (['fail', 'abandoned'].includes(p.status)) return true;
 
-            if (acceptedMissionsError) console.error(acceptedMissionsError);
+                        return false;
+                    });
 
-            const allMissions = [...(filtered || []), ...(acceptedMissions || [])];
-            setMissions(allMissions);
+                    if (isActive) {
+                        setMissions(filtered);
+                        setAcceptedMissions(participationMap);
+                    }
+                } catch (err) {
+                    console.error('Error fetching map data:', err);
+                } finally {
+                    if (isActive) setLoading(false);
+                }
+            };
 
-            setLoading(false);
-        };
+            fetchLocationAndMissions();
 
-        fetchMissions();
-    }, []);
+            return () => {
+                isActive = false;
+            };
+        }, [])
+    );
 
     if (!location || loading) {
         return <ActivityIndicator style={{ flex: 1 }} size="large" color="black" />;
@@ -114,12 +123,12 @@ export default function MapScreen({ navigation }) {
                         mission.lon
                     );
 
-                    const isAccepted = acceptedMissionIds.includes(mission.id);
                     const withinRange = distance <= ACCEPT_DISTANCE_METERS;
+                    const isAccepted = !!acceptedMissions[mission.id];
 
                     let pinColor = 'green';
                     if (isAccepted) pinColor = 'orange';
-                    else if (!withinRange) x = 'gray';
+                    else if (!withinRange) pinColor = 'gray';
 
                     return (
                         <Marker
@@ -135,7 +144,7 @@ export default function MapScreen({ navigation }) {
                             }
                             pinColor={pinColor}
                             onPress={() => {
-                                if (isAccepted || withinRange) {
+                                if (withinRange || isAccepted) {
                                     navigation.navigate('MissionDetails', {
                                         mission,
                                         playerId: MOCK_PLAYER_ID,

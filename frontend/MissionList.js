@@ -1,4 +1,3 @@
-// MissionList.js
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, Button, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
@@ -8,7 +7,6 @@ export default function MissionList({ navigation }) {
     const [missions, setMissions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [location, setLocation] = useState(null);
-    const [participations, setParticipations] = useState([]);
 
     const MOCK_PLAYER_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -28,44 +26,59 @@ export default function MissionList({ navigation }) {
     useEffect(() => {
         if (!location) return;
 
-        const fetchMissions = async () => {
-            const { data, error } = await supabase.from('missions').select('*');
-            if (error) console.error(error);
+        const fetchFilteredMissions = async () => {
+            try {
+                const { data: allMissions, error: missionsError } = await supabase
+                    .from('missions')
+                    .select('*');
 
-            if (data) {
-                const missionsWithDistance = data.map((mission) => {
-                    const distance = getDistanceFromLatLonInKm(
-                        location.coords.latitude,
-                        location.coords.longitude,
-                        mission.lat,
-                        mission.lon
-                    );
-                    return { ...mission, distance };
+                if (missionsError) throw missionsError;
+
+                const { data: participations, error: participationError } = await supabase
+                    .from('mission_participation')
+                    .select('mission_id, status, completed_at')
+                    .eq('player_id', MOCK_PLAYER_ID);
+
+                if (participationError) throw participationError;
+
+                const participationMap = {};
+                participations.forEach((p) => {
+                    participationMap[p.mission_id] = p;
                 });
-                setMissions(missionsWithDistance);
+
+                const visibleMissions = allMissions
+                    .filter((mission) => {
+                        const p = participationMap[mission.id];
+
+                        if (!p) return true;
+                        if (!p.completed_at) return true;
+                        if (['fail', 'abandoned'].includes(p.status)) return true;
+
+                        return false;
+                    })
+                    .map((mission) => {
+                        const distance = getDistanceFromLatLonInKm(
+                            location.coords.latitude,
+                            location.coords.longitude,
+                            mission.lat,
+                            mission.lon
+                        );
+                        return { ...mission, distance };
+                    });
+
+                setMissions(visibleMissions);
+            } catch (err) {
+                console.error('Error fetching filtered missions:', err);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
 
-        fetchMissions();
+        fetchFilteredMissions();
 
-        const interval = setInterval(fetchMissions, 10000);
+        const interval = setInterval(fetchFilteredMissions, 10000);
         return () => clearInterval(interval);
     }, [location]);
-
-    useEffect(() => {
-        const fetchParticipations = async () => {
-            const { data, error } = await supabase
-                .from('mission_participation')
-                .select('mission_id')
-                .eq('player_id', MOCK_PLAYER_ID)
-                .is('completed_at', null);
-
-            if (!error && data) setParticipations(data.map((p) => p.mission_id));
-        };
-
-        fetchParticipations();
-    }, []);
 
     const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
         const R = 6371;
@@ -83,26 +96,22 @@ export default function MissionList({ navigation }) {
     const deg2rad = (deg) => deg * (Math.PI / 180);
 
     const renderItem = ({ item }) => {
-        const alreadyStarted = participations.includes(item.id);
-
-        if (!alreadyStarted) {
-            return (
-                <View style={styles.missionBox}>
-                    <Text style={styles.title}>{item.title}</Text>
-                    <Text>{item.description}</Text>
-                    <Text>📍 {item.distance.toFixed(2)} km away</Text>
-                    <Button
-                        title="Start Mission"
-                        onPress={() =>
-                            navigation.navigate('MissionDetails', {
-                                mission: item,
-                                playerId: MOCK_PLAYER_ID,
-                            })
-                        }
-                    />
-                </View>
-            )
-        }
+        return (
+            <View style={styles.missionBox}>
+                <Text style={styles.title}>{item.title}</Text>
+                <Text>{item.description}</Text>
+                <Text>📍 {item.distance.toFixed(2)} km away</Text>
+                <Button
+                    title="Start Mission"
+                    onPress={() =>
+                        navigation.navigate('MissionDetails', {
+                            mission: item,
+                            playerId: MOCK_PLAYER_ID,
+                        })
+                    }
+                />
+            </View>
+        );
     };
 
     if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
@@ -137,4 +146,3 @@ const styles = StyleSheet.create({
         marginBottom: 6,
     },
 });
-

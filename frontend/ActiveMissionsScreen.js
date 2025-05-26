@@ -1,59 +1,104 @@
-// ActiveMissionsScreen.js
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import {
+    View,
+    Text,
+    Button,
+    FlatList,
+    StyleSheet,
+    ActivityIndicator,
+    Alert,
+} from 'react-native';
+
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from './supabaseClient';
 
 const MOCK_PLAYER_ID = '00000000-0000-0000-0000-000000000000';
 
 export default function ActiveMissionsScreen({ navigation }) {
-    const [mission, setMission] = useState([]);
+    const [missions, setMissions] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    useFocusEffect(
-        useCallback(() => {
-            const fetchCurrentMission = async () => {
-                const { data, error } = await supabase
-                    .from('mission_participation')
-                    .select('*, missions(*)')
-                    .eq('player_id', MOCK_PLAYER_ID)
-                    .is('completed_at', null)
-                    .order('started_at', { ascending: false });
+    const fetchCurrentMissions = async () => {
+        setLoading(true);
 
-                if (error) {
-                    console.error(error);
-                } else {
-                    setMission(data || []);
-                }
+        const { data, error } = await supabase
 
-                setLoading(false);
-            };
-
-            fetchCurrentMission();
-        }, [])
-    );
-
-    const completeMission = async () => {
-        const { error } = await supabase
             .from('mission_participation')
-            .update({ completed_at: new Date().toISOString() })
+            .select('*, missions(*)')
             .eq('player_id', MOCK_PLAYER_ID)
-            .eq('mission_id', mission.id)
-            .is('completed_at', null);
+            .is('completed_at', null)
+            .order('started_at', { ascending: false });
 
         if (error) {
             console.error(error);
-            Alert.alert('Error', 'Failed to complete mission.');
         } else {
-            Alert.alert('🎉 Mission Complete!', `You completed ${mission.title}`);
-            setMission(null);
+            setMissions(data || []);
+        }
+
+        setLoading(false);
+    };
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchCurrentMissions();
+        }, [])
+    );
+
+    const completeMission = async (missionId, missionTitle) => {
+        try {
+            const now = new Date().toISOString();
+
+            const { error: updateError } = await supabase
+                .from('mission_participation')
+                .update({ completed_at: now, status: 'completed' })
+                .eq('player_id', MOCK_PLAYER_ID)
+                .eq('mission_id', missionId)
+                .is('completed_at', null);
+
+            if (updateError) throw updateError;
+
+            const { data: playerData, error: playerError } = await supabase
+                .from('players')
+                .select('reputation')
+                .eq('id', MOCK_PLAYER_ID)
+                .single();
+
+            if (playerError) throw playerError;
+
+            const currentRep = playerData?.reputation || 0;
+            const pointsEarned = 50;
+            const newRep = currentRep + pointsEarned;
+
+            let newTier = 'F';
+            if (newRep >= 900) newTier = 'S';
+            else if (newRep >= 700) newTier = 'A';
+            else if (newRep >= 500) newTier = 'B';
+            else if (newRep >= 300) newTier = 'C';
+            else if (newRep >= 200) newTier = 'D';
+            else if (newRep >= 100) newTier = 'E';
+
+            const { error: repError } = await supabase
+                .from('players')
+                .update({ reputation: newRep, tier: newTier })
+                .eq('id', MOCK_PLAYER_ID);
+
+            if (repError) throw repError;
+
+            Alert.alert(
+                '🎉 Mission Complete!',
+                `You completed ${missionTitle}.\n+${pointsEarned} points\nNew Tier: ${newTier}`
+            );
+
+            fetchCurrentMissions();
+        } catch (err) {
+            console.error(err);
+            Alert.alert('Error', 'Mission completion failed.');
         }
     };
 
     if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
 
-    mission.forEach(m => console.log(m.missions));
-    if (!mission) {
+    if (!missions || missions.length === 0) {
         return (
             <View style={styles.container}>
                 <Text style={styles.message}>No active mission</Text>
@@ -61,45 +106,37 @@ export default function ActiveMissionsScreen({ navigation }) {
         );
     }
 
-    const renderItem = ({ item }) => {
-
-        return (
-            <View style={styles.missionBox}>
-                <Text style={styles.title}>{item.missions.title}</Text>
-                <Text>{item.missions.description}</Text>
-                {/*<Text>📍 {item.distance.toFixed(2)} km away</Text>*/}
-                <View style={styles.missionDetails}>
-                    <Button
-                        title="Mission Details"
-                        onPress={() =>
-                            navigation.navigate('MissionDetails', {
-                                mission: item.missions,
-                                playerId: MOCK_PLAYER_ID,
-                            })
-                        }
-                    />
-                </View>
+    const renderItem = ({ item }) => (
+        <View style={styles.missionBox}>
+            <Text style={styles.title}>{item.missions.title}</Text>
+            <Text style={styles.description}>{item.missions.description}</Text>
+            <View style={styles.missionDetails}>
+                <Button
+                    title="Details"
+                    onPress={() =>
+                        navigation.navigate('MissionDetails', {
+                            mission: item.missions,
+                            playerId: MOCK_PLAYER_ID,
+                        })
+                    }
+                />
+                <Button
+                    title="Complete"
+                    onPress={() => completeMission(item.mission_id, item.missions.title)}
+                />
             </View>
-        )
-    };
-
+        </View>
+    );
 
     return (
         <View style={styles.container}>
-            <View style={styles.missionBox}>
-                <FlatList
-                    data={mission}
-                    keyExtractor={(item) => item.id}
-                    renderItem={renderItem}
-                />
-
-                <Text style={styles.title}>{mission.title}</Text>
-                <Text>{mission.description}</Text>
-            </View>
+            <FlatList
+                data={missions}
+                keyExtractor={(item) => item.id}
+                renderItem={renderItem}
+            />
         </View>
-
     );
-
 }
 
 const styles = StyleSheet.create({
@@ -122,7 +159,9 @@ const styles = StyleSheet.create({
         textAlign: 'left',
     },
     missionDetails: {
-        alignSelf: 'flex-end'
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 10,
     },
     description: {
         fontSize: 16,
@@ -137,4 +176,3 @@ const styles = StyleSheet.create({
         borderRadius: 10,
     },
 });
-
