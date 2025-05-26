@@ -7,7 +7,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import MapScreen from './MapScreen';
 import MissionList from './MissionList';
 import MissionDetails from './MissionDetails';
-import CurrentMission from './CurrentMission';
+import ActiveMissionsScreen from './ActiveMissionsScreen';
 import NPCChat from './NPCChat';
 
 const Tab = createBottomTabNavigator();
@@ -23,13 +23,22 @@ function MapStack() {
     );
 }
 
+function ActiveMissionsStack() {
+    return (
+        <Stack.Navigator>
+            <Stack.Screen name="ActiveMissionsScreen" component={ActiveMissionsScreen} options={{ title: 'Active Missions' }} />
+            <Stack.Screen name="MissionDetails" component={MissionDetails} options={{ title: 'Mission Details' }} />
+        </Stack.Navigator>
+    );
+}
+
 export default function App() {
     return (
         <NavigationContainer>
             <Tab.Navigator initialRouteName="Map">
                 <Tab.Screen name="Map" component={MapStack} options={{ headerShown: false }} />
                 <Tab.Screen name="Missions" component={MissionList} />
-                <Tab.Screen name="Active Mission" component={CurrentMission} />
+                <Tab.Screen name="Active Missions" component={ActiveMissionsStack} options={{ headerShown: false }} />
             </Tab.Navigator>
         </NavigationContainer>
     );
