@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -50,7 +50,8 @@ export default function ActiveMissionsScreen({ navigation }) {
                 .from('mission_participation')
                 .update({ completed_at: now, status: 'completed' })
                 .eq('player_id', MOCK_PLAYER_ID)
-                .eq('mission_id', missionId);
+                .eq('mission_id', missionId)
+                .is('completed_at', null);
 
             if (updateError) throw updateError;
 
@@ -62,7 +63,7 @@ export default function ActiveMissionsScreen({ navigation }) {
 
             if (playerError) throw playerError;
 
-            const currentRep = playerData.reputation || 0;
+            const currentRep = playerData?.reputation || 0;
             const pointsEarned = 50;
             const newRep = currentRep + pointsEarned;
 
@@ -95,12 +96,19 @@ export default function ActiveMissionsScreen({ navigation }) {
 
     if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
 
+    if (!missions || missions.length === 0) {
+        return (
+            <View style={styles.container}>
+                <Text style={styles.message}>No active mission</Text>
+            </View>
+        );
+    }
+
     const renderItem = ({ item }) => (
         <View style={styles.missionBox}>
             <Text style={styles.title}>{item.missions.title}</Text>
             <Text style={styles.description}>{item.missions.description}</Text>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+            <View style={styles.missionDetails}>
                 <Button
                     title="Details"
                     onPress={() =>
@@ -111,7 +119,7 @@ export default function ActiveMissionsScreen({ navigation }) {
                     }
                 />
                 <Button
-                    title="Complete Mission"
+                    title="Complete"
                     onPress={() => completeMission(item.mission_id, item.missions.title)}
                 />
             </View>
@@ -120,15 +128,11 @@ export default function ActiveMissionsScreen({ navigation }) {
 
     return (
         <View style={styles.container}>
-            {missions.length === 0 ? (
-                <Text style={styles.message}>No active mission</Text>
-            ) : (
-                <FlatList
-                    data={missions}
-                    keyExtractor={(item) => `${item.player_id}-${item.mission_id}`}
-                    renderItem={renderItem}
-                />
-            )}
+            <FlatList
+                data={missions}
+                keyExtractor={(item) => item.id}
+                renderItem={renderItem}
+            />
         </View>
     );
 }
@@ -138,6 +142,7 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 24,
         backgroundColor: '#222',
+        justifyContent: 'center',
     },
     message: {
         fontSize: 18,
@@ -149,9 +154,12 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#fff',
         marginBottom: 12,
+        textAlign: 'left',
     },
     missionDetails: {
-        alignSelf: 'flex-end',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 10,
     },
     description: {
         fontSize: 16,

@@ -28,14 +28,12 @@ export default function MissionList({ navigation }) {
 
         const fetchFilteredMissions = async () => {
             try {
-                // Step 1: Get all missions
                 const { data: allMissions, error: missionsError } = await supabase
                     .from('missions')
                     .select('*');
 
                 if (missionsError) throw missionsError;
 
-                // Step 2: Get player's participations
                 const { data: participations, error: participationError } = await supabase
                     .from('mission_participation')
                     .select('mission_id, status, completed_at')
@@ -43,22 +41,20 @@ export default function MissionList({ navigation }) {
 
                 if (participationError) throw participationError;
 
-                // Step 3: Build lookup map
                 const participationMap = {};
                 participations.forEach((p) => {
                     participationMap[p.mission_id] = p;
                 });
 
-                // Step 4: Filter based on logic
                 const visibleMissions = allMissions
                     .filter((mission) => {
                         const p = participationMap[mission.id];
 
-                        if (!p) return true; // never taken
-                        if (!p.completed_at) return true; // in progress
-                        if (['fail', 'abandoned'].includes(p.status)) return true; // retry allowed
+                        if (!p) return true;
+                        if (!p.completed_at) return true;
+                        if (['fail', 'abandoned'].includes(p.status)) return true;
 
-                        return false; // completed or otherwise hidden
+                        return false;
                     })
                     .map((mission) => {
                         const distance = getDistanceFromLatLonInKm(

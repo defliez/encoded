@@ -36,7 +36,6 @@ export default function MapScreen({ navigation }) {
                 try {
                     setLoading(true);
 
-                    // Get user location
                     const { status } = await Location.requestForegroundPermissionsAsync();
                     if (status !== 'granted') {
                         alert('Location permission denied');
@@ -45,7 +44,6 @@ export default function MapScreen({ navigation }) {
                     const loc = await Location.getCurrentPositionAsync({});
                     if (isActive) setLocation(loc);
 
-                    // Fetch missions and participation
                     const { data: allMissions, error: missionsError } = await supabase
                         .from('missions')
                         .select('*');
@@ -65,11 +63,11 @@ export default function MapScreen({ navigation }) {
                     const filtered = allMissions.filter((mission) => {
                         const p = participationMap[mission.id];
 
-                        if (!p) return true; // never taken
-                        if (!p.completed_at) return true; // in progress
-                        if (['fail', 'abandoned'].includes(p.status)) return true; // retryable
+                        if (!p) return true;
+                        if (!p.completed_at) return true;
+                        if (['fail', 'abandoned'].includes(p.status)) return true;
 
-                        return false; // completed
+                        return false;
                     });
 
                     if (isActive) {
