@@ -8,6 +8,7 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
+
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from './supabaseClient';
 
@@ -21,6 +22,7 @@ export default function ActiveMissionsScreen({ navigation }) {
         setLoading(true);
 
         const { data, error } = await supabase
+
             .from('mission_participation')
             .select('*, missions(*)')
             .eq('player_id', MOCK_PLAYER_ID)
