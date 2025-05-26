@@ -49,9 +49,8 @@ export default function MissionList({ navigation }) {
                 const visibleMissions = allMissions
                     .filter((mission) => {
                         const p = participationMap[mission.id];
+                        if(!p?.completed_at) return true;
 
-                        if (!p) return true;
-                        if (!p.completed_at) return true;
                         if (['fail', 'abandoned'].includes(p.status)) return true;
 
                         return false;
