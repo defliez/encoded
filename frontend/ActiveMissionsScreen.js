@@ -1,6 +1,7 @@
 // ActiveMissionsScreen.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from './supabaseClient';
 
 const MOCK_PLAYER_ID = '00000000-0000-0000-0000-000000000000';
@@ -9,27 +10,28 @@ export default function ActiveMissionsScreen({ navigation }) {
     const [mission, setMission] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchCurrentMission = async () => {
-            const { data, error } = await supabase
-                .from('mission_participation')
-                .select('*, missions(*)')
-                .eq('player_id', MOCK_PLAYER_ID)
-                .is('completed_at', null)
-                .order('started_at', { ascending: false })
+    useFocusEffect(
+        useCallback(() => {
+            const fetchCurrentMission = async () => {
+                const { data, error } = await supabase
+                    .from('mission_participation')
+                    .select('*, missions(*)')
+                    .eq('player_id', MOCK_PLAYER_ID)
+                    .is('completed_at', null)
+                    .order('started_at', { ascending: false });
 
-            if (error) {
-                console.error(error);
-            } else if (data.length > 0) {
-                console.log("smarta namn", data);
-                setMission(data);
-            }
+                if (error) {
+                    console.error(error);
+                } else {
+                    setMission(data || []);
+                }
 
-            setLoading(false);
-        };
+                setLoading(false);
+            };
 
-        fetchCurrentMission();
-    }, []);
+            fetchCurrentMission();
+        }, [])
+    );
 
     const completeMission = async () => {
         const { error } = await supabase
