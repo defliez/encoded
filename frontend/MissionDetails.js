@@ -34,7 +34,7 @@ export default function MissionDetails({ route, navigation }) {
             console.error(error);
             Alert.alert('Error', 'Failed to start mission.');
         } else {
-            Alert.alert('Mission Started!', `You started: ${mission.title}`);
+            // Alert.alert('Mission Started!', `You started: ${mission.title}`);
             // navigation.goBack();
             navigation.navigate('NPCChat', { npcId: mission.npc_id });
         }
