@@ -1,8 +1,10 @@
-// supabaseClient.js
 import { PostgrestClient } from '@supabase/postgrest-js';
+import dotenv from 'dotenv';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+dotenv.config();
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
 export const supabase = new PostgrestClient(`${supabaseUrl}/rest/v1`, {
   headers: {
