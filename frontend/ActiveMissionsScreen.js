@@ -22,7 +22,6 @@ export default function ActiveMissionsScreen({ navigation }) {
         setLoading(true);
 
         const { data, error } = await supabase
-
             .from('mission_participation')
             .select('*, missions(*)')
             .eq('player_id', MOCK_PLAYER_ID)
@@ -117,6 +116,14 @@ export default function ActiveMissionsScreen({ navigation }) {
                         navigation.navigate('MissionDetails', {
                             mission: item.missions,
                             playerId: MOCK_PLAYER_ID,
+                        })
+                    }
+                />
+                <Button
+                    title="Chat"
+                    onPress={() =>
+                        navigation.navigate('NPCChat', {
+                            npcId: item.missions.npc_id,
                         })
                     }
                 />
