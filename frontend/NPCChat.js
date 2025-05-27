@@ -25,17 +25,30 @@ export default function NPCChat({ route }) {
                 if (error) console.error(error);
                 else setNpc(data);
 
-                const res = await fetch(`http://${BACKEND_URL}:3000/npc-chat/history?playerId=00000000-0000-0000-0000-000000000000&npcId=${npcId}`);
+                const res = await fetch(`http://${BACKEND_URL}:3000/npc-chat/first-message`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        npcId,
+                        playerId: '00000000-0000-0000-0000-000000000000',
+                    }),
+                });
+
                 const json = await res.json();
 
-                if (json.history) {
-                    const formattedMessages = json.history.map((msg, i) => ({
+                // Then fetch all history
+                const historyRes = await fetch(`http://${BACKEND_URL}:3000/npc-chat/history?playerId=00000000-0000-0000-0000-000000000000&npcId=${npcId}`);
+                const historyJson = await historyRes.json();
+
+                if (historyJson.history) {
+                    const formatted = historyJson.history.map((msg, i) => ({
                         id: i.toString(),
                         from: msg.from_role,
                         text: msg.text,
                     }));
-                    setMessages(formattedMessages);
+                    setMessages(formatted);
                 }
+
             } catch (err) {
                 console.error("Failed to fetch NPC or chat history", err);
             }
