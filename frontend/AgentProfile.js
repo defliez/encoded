@@ -38,108 +38,108 @@ const AgentProfile = () => {
 
     return (
         <ScrollView contentContainerStyle={styles.container}>
-            <View style={styles.header}>
-                {profilePicture ? (
-                    <Image
-                        source={{ uri: profilePicture }}
-                        style={styles.profilePicture}
-                    />
-                ) : (
-                    <Icon name="user-circle" size={20} color="#FFD700" />
-                )}
-                <Text style={styles.alias}>{alias}</Text>
-                <Text style={styles.tier}>Tier: {tier}</Text>
-            </View>
+        <View style={styles.header}>
+        {profilePicture ? (
+            <Image
+            source={{ uri: profilePicture }}
+            style={styles.profilePicture}
+            />
+        ) : (
+            <Icon name="user-circle" size={20} color="#FFD700" />
+        )}
+        <Text style={styles.alias}>{alias}</Text>
+        <Text style={styles.tier}>Tier: {tier}</Text>
+        </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Statistics</Text>
-                <View style={styles.statItem}>
-                    <Icon name="star" size={20} color="#FFD700" />
-                    <Text style={styles.statText}>Points: {points}</Text>
-                </View>
-                <View style={styles.statItem}>
-                    <Text style={styles.statText}>
-                        Missions
-                        <Icon name="check" size={20} color="#28a745" /> {missionsCompleted} /
-                        <Icon name="times" size={20} color="#dc3545" /> {missionsFailed} -
-                        ({completionRate}%)
-                    </Text>
-                </View>
-            </View>
+        <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Statistics</Text>
+        <View style={styles.statItem}>
+        <Icon name="star" size={20} color="#FFD700" />
+        <Text style={styles.statText}>Points: {points}</Text>
+        </View>
+        <View style={styles.statItem}>
+        <Text style={styles.statText}>
+        Missions
+        <Icon name="check" size={20} color="#28a745" /> {missionsCompleted} /
+        <Icon name="times" size={20} color="#dc3545" /> {missionsFailed} -
+        ({completionRate}%)
+        </Text>
+        </View>
+        </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Skills and Abilities</Text>
-                <View style={styles.skillsContainer}>
-                    {skills.map((skill, index) => (
-                        <View key={index} style={styles.skillItem}>
-                            <Icon name="cogs" size={20} color="#007bff" />
-                            <Text style={styles.skillText}>{skill}</Text>
-                        </View>
-                    ))}
-                </View>
+        <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Skills and Abilities</Text>
+        <View style={styles.skillsContainer}>
+        {skills.map((skill, index) => (
+            <View key={index} style={styles.skillItem}>
+            <Icon name="cogs" size={20} color="#007bff" />
+            <Text style={styles.skillText}>{skill}</Text>
             </View>
+        ))}
+        </View>
+        </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Equipment and Gear</Text>
-                <View style={styles.gearContainer}>
-                    {inventory.map((item, index) => (
-                        <View key={index} style={styles.gearItem}>
-                            <Icon name="wrench" size={20} color="#6c757d" />
-                            <Text style={styles.gearText}>{item}</Text>
-                        </View>
-                    ))}
-                </View>
+        <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Equipment and Gear</Text>
+        <View style={styles.gearContainer}>
+        {inventory.map((item, index) => (
+            <View key={index} style={styles.gearItem}>
+            <Icon name="wrench" size={20} color="#6c757d" />
+            <Text style={styles.gearText}>{item}</Text>
             </View>
+        ))}
+        </View>
+        </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Achievements</Text>
-                <View style={styles.achievementsContainer}>
-                    {achievements.map((achievement, index) => (
-                        <View key={index} style={styles.achievementItem}>
-                            <Icon name="medal" size={20} color="#FFD700" />
-                            <Text style={styles.achievementText}>{achievement}</Text>
-                        </View>
-                    ))}
-                </View>
+        <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Achievements</Text>
+        <View style={styles.achievementsContainer}>
+        {achievements.map((achievement, index) => (
+            <View key={index} style={styles.achievementItem}>
+            <Icon name="medal" size={20} color="#FFD700" />
+            <Text style={styles.achievementText}>{achievement}</Text>
             </View>
+        ))}
+        </View>
+        </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Social Features</Text>
-                <View style={styles.friendsContainer}>
-                    {friends.map((friend, index) => (
-                        <View key={index} style={styles.friendItem}>
-                            <Icon name="user-friends" size={20} color="#17a2b8" />
-                            <Text style={styles.friendText}>{friend}</Text>
-                        </View>
-                    ))}
-                </View>
+        <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Social Features</Text>
+        <View style={styles.friendsContainer}>
+        {friends.map((friend, index) => (
+            <View key={index} style={styles.friendItem}>
+            <Icon name="user-friends" size={20} color="#17a2b8" />
+            <Text style={styles.friendText}>{friend}</Text>
             </View>
+        ))}
+        </View>
+        </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Settings</Text>
-                <View style={styles.settingItem}>
-                    <Text style={styles.settingText}>Dark Mode</Text>
-                    <Switch
-                        value={isDarkMode}
-                        onValueChange={() => setIsDarkMode(previousState => !previousState)}
-                        trackColor={{ false: "#767577", true: "#81b0ff" }}
-                        thumbColor={isDarkMode ? "#f5dd4b" : "#f4f3f4"}
-                    />
-                </View>
-            </View>
+        <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Settings</Text>
+        <View style={styles.settingItem}>
+        <Text style={styles.settingText}>Dark Mode</Text>
+        <Switch
+        value={isDarkMode}
+        onValueChange={() => setIsDarkMode(previousState => !previousState)}
+        trackColor={{ false: "#767577", true: "#81b0ff" }}
+        thumbColor={isDarkMode ? "#f5dd4b" : "#f4f3f4"}
+        />
+        </View>
+        </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Notifications</Text>
-                <View style={styles.settingItem}>
-                    <Text style={styles.settingText}>Alerts</Text>
-                    <Switch
-                        value={allowNotifications} // Replace with actual state if you have a notifications state
-                        onValueChange={() => setAllowNotification(previousState => !previousState)}
-                        trackColor={{ false: "#767577", true: "#81b0ff" }}
-                        thumbColor="#f5dd4b"
-                    />
-                </View>
-            </View>
+        <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Notifications</Text>
+        <View style={styles.settingItem}>
+        <Text style={styles.settingText}>Alerts</Text>
+        <Switch
+        value={allowNotifications} // Replace with actual state if you have a notifications state
+        onValueChange={() => setAllowNotification(previousState => !previousState)}
+        trackColor={{ false: "#767577", true: "#81b0ff" }}
+        thumbColor="#f5dd4b"
+        />
+        </View>
+        </View>
         </ScrollView>
     );
 };
