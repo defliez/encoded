@@ -102,6 +102,34 @@ app.post("/npc-chat", async (req, res) => {
     }
 });
 
+app.get("/npc-chat/history", async (req, res) => {
+    const { playerId, npcId } = req.query;
+
+    if (!playerId || !npcId) {
+        return res.status(400).json({ error: "Missing playerId or npcId" });
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from("npc_chat_messages")
+            .select("from_role, text, created_at")
+            .eq("player_id", playerId)
+            .eq("npc_id", npcId)
+            .order("created_at", { ascending: true });
+
+        if (error) {
+            console.error(error);
+            return res.status(500).json({ error: "Failed to fetch chat history" });
+        }
+
+        res.json({ history: data });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Unexpected error" });
+    }
+});
+
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });

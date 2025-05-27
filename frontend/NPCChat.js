@@ -15,22 +15,29 @@ export default function NPCChat({ route }) {
     // Fetch NPC info
     useEffect(() => {
         const fetchNpc = async () => {
-            const { data, error } = await supabase
-                .from('npcs')
-                .select('*')
-                .eq('id', npcId)
-                .single();
+            try {
+                const { data, error } = await supabase
+                    .from('npcs')
+                    .select('*')
+                    .eq('id', npcId)
+                    .single();
 
-            if (error) console.error(error);
-            else {
-                setNpc(data);
-                setMessages([
-                    {
-                        id: 'npc-intro',
-                        from: 'npc',
-                        text: data.intro,
-                    },
-                ]);
+                if (error) console.error(error);
+                else setNpc(data);
+
+                const res = await fetch(`http://${BACKEND_URL}:3000/npc-chat/history?playerId=00000000-0000-0000-0000-000000000000&npcId=${npcId}`);
+                const json = await res.json();
+
+                if (json.history) {
+                    const formattedMessages = json.history.map((msg, i) => ({
+                        id: i.toString(),
+                        from: msg.from_role,
+                        text: msg.text,
+                    }));
+                    setMessages(formattedMessages);
+                }
+            } catch (err) {
+                console.error("Failed to fetch NPC or chat history", err);
             }
 
             setLoading(false);
