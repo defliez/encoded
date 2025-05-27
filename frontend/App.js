@@ -4,13 +4,14 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/FontAwesome';
 
+import LoginScreen from './LoginScreen';
 import MapScreen from './MapScreen';
 import AgentProfile from './AgentProfile';
 import MissionDetails from './MissionDetails';
 import ActiveMissionsScreen from './ActiveMissionsScreen';
 import NPCChat from './NPCChat';
 
-import { UserProvider } from './UserContext';
+import { UserProvider, useUser } from './UserContext';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -61,48 +62,32 @@ function ActiveMissionsStack() {
     );
 }
 
+function Root() {
+    const { authUser, loading } = useUser();
+
+    if (loading) return null;
+
+    return (
+        <NavigationContainer>
+            {authUser ? (
+                <Tab.Navigator initialRouteName="Map">
+                    <Tab.Screen name="Map" component={MapStack} options={{ headerShown: false, tabBarIcon: ({ color, size }) => <Icon name="map" color={color} size={size} /> }} />
+                    <Tab.Screen name="Agent Profile" component={AgentProfileStack} options={{ headerShown: false, tabBarIcon: ({ color, size }) => <Icon name="id-badge" color={color} size={size} /> }} />
+                    <Tab.Screen name="Active Missions" component={ActiveMissionsStack} options={{ headerShown: false, tabBarIcon: ({ color, size }) => <Icon name="user-secret" color={color} size={size} /> }} />
+                </Tab.Navigator>
+            ) : (
+                <Stack.Navigator>
+                    <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+                </Stack.Navigator>
+            )}
+        </NavigationContainer>
+    );
+}
+
 export default function App() {
     return (
         <UserProvider>
-            <NavigationContainer theme={DarkTheme}>
-                <Tab.Navigator
-                    initialRouteName="Map"
-                    screenOptions={{
-                        tabBarStyle: { backgroundColor: '#111', borderTopColor: '#222' },
-                        tabBarActiveTintColor: '#8bc34a',
-                        tabBarInactiveTintColor: '#888',
-                        headerShown: false,
-                    }}
-                >
-                    <Tab.Screen
-                        name="Map"
-                        component={MapStack}
-                        options={{
-                            tabBarIcon: ({ color, size }) => (
-                                <Icon name="map" color={color} size={size} />
-                            ),
-                        }}
-                    />
-                    <Tab.Screen
-                        name="Agent Profile"
-                        component={AgentProfileStack}
-                        options={{
-                            tabBarIcon: ({ color, size }) => (
-                                <Icon name="id-badge" color={color} size={size} />
-                            ),
-                        }}
-                    />
-                    <Tab.Screen
-                        name="Active Missions"
-                        component={ActiveMissionsStack}
-                        options={{
-                            tabBarIcon: ({ color, size }) => (
-                                <Icon name="user-secret" color={color} size={size} />
-                            ),
-                        }}
-                    />
-                </Tab.Navigator>
-            </NavigationContainer>
+            <Root />
         </UserProvider>
     );
 }

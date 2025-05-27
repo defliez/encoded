@@ -1,11 +1,14 @@
+// MapScreen.js
 import SPY_MAP_STYLE from './SpyMapStyle';
 
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { supabase } from './supabaseClient';
-import { useFocusEffect } from '@react-navigation/native';
+import { useUser } from './UserContext';
+
 
 import blueEye from './assets/view.png';
 import redEye from './assets/technology.png';
@@ -31,7 +34,8 @@ export default function MapScreen({ navigation }) {
     const [acceptedMissions, setAcceptedMissions] = useState({});
     const [loading, setLoading] = useState(true);
 
-    const MOCK_PLAYER_ID = '00000000-0000-0000-0000-000000000000';
+    const { authUser, loading: userLoading } = useUser();
+
     const ACCEPT_DISTANCE_METERS = 100;
 
     useFocusEffect(
@@ -58,7 +62,7 @@ export default function MapScreen({ navigation }) {
                     const { data: participations, error: participationError } = await supabase
                         .from('mission_participation')
                         .select('mission_id, status, completed_at')
-                        .eq('player_id', MOCK_PLAYER_ID);
+                        .eq('player_id', authUser.id);
                     if (participationError) throw participationError;
 
                     const participationMap = {};
@@ -95,7 +99,7 @@ export default function MapScreen({ navigation }) {
         }, [])
     );
 
-    if (!location || loading) {
+    if (!authUser || !location || userLoading || loading) {
         return <ActivityIndicator style={{ flex: 1 }} size="large" color="black" />;
     }
 
@@ -156,7 +160,7 @@ export default function MapScreen({ navigation }) {
                                 if (withinRange || isAccepted) {
                                     navigation.navigate('MissionDetails', {
                                         mission,
-                                        playerId: MOCK_PLAYER_ID,
+                                        playerId: authUser.id,
                                     });
                                 }
                             }}
