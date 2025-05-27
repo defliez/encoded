@@ -95,7 +95,57 @@ app.post("/npc-chat", async (req, res) => {
             },
         ]);
 
+        // Check for win phrases
+        const winPhrases = {
+            "Agent Cipher": "CIPHER CONFIRMS",
+            "Agent Calculator": "CALCULATOR PROTOCOL COMPLETE",
+            "Agent Noodle": "NOODLE NETWORK ACTIVATED",
+        };
+
+        const npcNameRes = await supabase
+            .from("npcs")
+            .select("name")
+            .eq("id", npcId)
+            .single();
+
+        const npcName = npcNameRes?.data?.name;
+        const winTrigger = winPhrases[npcName];
+
+        if (winTrigger && reply.includes(winTrigger)) {
+            // Get the mission ID linked to this NPC
+            const { data: mission, error: missionError } = await supabase
+                .from("missions")
+                .select("id")
+                .eq("npc_id", npcId)
+                .single();
+
+            if (missionError || !mission) {
+                console.error("Failed to find mission:", missionError);
+            } else {
+                // Find player’s mission participation
+                const { data: participation, error: participationError } = await supabase
+                    .from("mission_participation")
+                    .select("id")
+                    .eq("player_id", playerId)
+                    .eq("mission_id", mission.id)
+                    .is("completed_at", null)
+                    .single();
+
+                if (participationError || !participation) {
+                    console.error("No participation found:", participationError);
+                } else {
+                    // Mark mission complete
+                    const now = new Date().toISOString();
+                    await supabase
+                        .from("mission_participation")
+                        .update({ completed_at: now, status: "completed" })
+                        .eq("id", participation.id);
+                }
+            }
+        }
+
         res.json({ reply });
+
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to get response from Gemini" });
