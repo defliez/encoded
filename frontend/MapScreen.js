@@ -1,12 +1,18 @@
 // MapScreen.js
+import SPY_MAP_STYLE from './SpyMapStyle';
+
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { supabase } from './supabaseClient';
 import { useUser } from './UserContext';
 
+
+import blueEye from './assets/view.png';
+import redEye from './assets/technology.png';
+import blackEye from './assets/focus.png';
 
 function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
@@ -101,6 +107,8 @@ export default function MapScreen({ navigation }) {
         <View style={styles.container}>
             <MapView
                 style={styles.map}
+                provider="google"
+                customMapStyle={SPY_MAP_STYLE}
                 initialRegion={{
                     latitude: location.coords.latitude,
                     longitude: location.coords.longitude,
@@ -130,9 +138,11 @@ export default function MapScreen({ navigation }) {
                     const withinRange = distance <= ACCEPT_DISTANCE_METERS;
                     const isAccepted = !!acceptedMissions[mission.id];
 
-                    let pinColor = 'green';
-                    if (isAccepted) pinColor = 'orange';
-                    else if (!withinRange) pinColor = 'gray';
+                    const markerIcon = isAccepted
+                        ? blackEye
+                        : withinRange
+                            ? blueEye
+                            : redEye;
 
                     return (
                         <Marker
@@ -146,7 +156,6 @@ export default function MapScreen({ navigation }) {
                                         ? mission.description
                                         : `Too far away (${Math.round(distance)}m)`
                             }
-                            pinColor={pinColor}
                             onPress={() => {
                                 if (withinRange || isAccepted) {
                                     navigation.navigate('MissionDetails', {
@@ -155,7 +164,12 @@ export default function MapScreen({ navigation }) {
                                     });
                                 }
                             }}
-                        />
+                        >
+                            <Image
+                                source={markerIcon}
+                                style={{ width: 32, height: 32, resizeMode: 'contain' }}
+                            />
+                        </Marker>
                     );
                 })}
             </MapView>
