@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Button, StyleSheet, Alert } from 'react-native';
 import { supabase } from './supabaseClient';
+import { useUser } from './UserContext';
 
 export default function MissionDetails({ route, navigation }) {
-    const { mission, playerId } = route.params;
     const [alreadyStarted, setAlreadyStarted] = useState(false);
+    const { mission } = route.params;
+    const { authUser } = useUser();
 
     useEffect(() => {
+        if (!authUser) return;
         const checkParticipation = async () => {
             const { data, error } = await supabase
                 .from('mission_participation')
                 .select('id')
-                .eq('player_id', playerId)
+                .eq('player_id', authUser.id)
                 .eq('mission_id', mission.id)
                 .is('completed_at', null)
                 .single();
@@ -25,7 +28,7 @@ export default function MissionDetails({ route, navigation }) {
     const handleStartMission = async () => {
         const { error } = await supabase.from('mission_participation').insert([
             {
-                player_id: playerId,
+                player_id: authUser.id,
                 mission_id: mission.id,
             },
         ]);

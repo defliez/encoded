@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { supabase } from './supabaseClient';
+import { useUser } from './UserContext';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -12,8 +13,11 @@ export default function NPCChat({ route }) {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(true);
 
+    const { authUser } = useUser();
+
     // Fetch NPC info
     useEffect(() => {
+        if (!authUser) return;
         const fetchNpc = async () => {
             try {
                 const { data, error } = await supabase
@@ -30,14 +34,14 @@ export default function NPCChat({ route }) {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         npcId,
-                        playerId: '00000000-0000-0000-0000-000000000000',
+                        playerId: authUser.id,
                     }),
                 });
 
                 const json = await res.json();
 
                 // Then fetch all history
-                const historyRes = await fetch(`http://${BACKEND_URL}:3000/npc-chat/history?playerId=00000000-0000-0000-0000-000000000000&npcId=${npcId}`);
+                const historyRes = await fetch(`http://${BACKEND_URL}:3000/npc-chat/history?playerId=${authUser.id}&npcId=${npcId}`);
                 const historyJson = await historyRes.json();
 
                 if (historyJson.history) {
@@ -92,7 +96,7 @@ export default function NPCChat({ route }) {
                 },
                 body: JSON.stringify({
                     npcId,
-                    playerId: '00000000-0000-0000-0000-000000000000', // or actual player ID
+                    playerId: authUser.id,
                     playerMessage, // <-- make sure this line exists and is not empty
                 }),
             });

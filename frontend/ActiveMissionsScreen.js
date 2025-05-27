@@ -1,22 +1,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-    View,
-    Text,
-    Button,
-    FlatList,
-    StyleSheet,
-    ActivityIndicator,
-    Alert,
-} from 'react-native';
+import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { useUser } from './UserContext';
 
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from './supabaseClient';
 
-const MOCK_PLAYER_ID = '00000000-0000-0000-0000-000000000000';
-
 export default function ActiveMissionsScreen({ navigation }) {
     const [missions, setMissions] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    const { authUser, loading: userLoading } = useUser();
+
 
     const fetchCurrentMissions = async () => {
         setLoading(true);
@@ -24,7 +18,7 @@ export default function ActiveMissionsScreen({ navigation }) {
         const { data, error } = await supabase
             .from('mission_participation')
             .select('*, missions(*)')
-            .eq('player_id', MOCK_PLAYER_ID)
+            .eq('player_id', authUser.id)
             .is('completed_at', null)
             .order('started_at', { ascending: false });
 
@@ -50,7 +44,7 @@ export default function ActiveMissionsScreen({ navigation }) {
             const { error: updateError } = await supabase
                 .from('mission_participation')
                 .update({ completed_at: now, status: 'completed' })
-                .eq('player_id', MOCK_PLAYER_ID)
+                .eq('player_id', authUser.id)
                 .eq('mission_id', missionId)
                 .is('completed_at', null);
 
@@ -59,7 +53,7 @@ export default function ActiveMissionsScreen({ navigation }) {
             const { data: playerData, error: playerError } = await supabase
                 .from('players')
                 .select('reputation')
-                .eq('id', MOCK_PLAYER_ID)
+                .eq('id', authUser.id)
                 .single();
 
             if (playerError) throw playerError;
@@ -79,7 +73,7 @@ export default function ActiveMissionsScreen({ navigation }) {
             const { error: repError } = await supabase
                 .from('players')
                 .update({ reputation: newRep, tier: newTier })
-                .eq('id', MOCK_PLAYER_ID);
+                .eq('id', authUser.id);
 
             if (repError) throw repError;
 
@@ -95,7 +89,7 @@ export default function ActiveMissionsScreen({ navigation }) {
         }
     };
 
-    if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
+    if (userLoading || loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
 
     if (!missions || missions.length === 0) {
         return (
@@ -115,7 +109,7 @@ export default function ActiveMissionsScreen({ navigation }) {
                     onPress={() =>
                         navigation.navigate('MissionDetails', {
                             mission: item.missions,
-                            playerId: MOCK_PLAYER_ID,
+                            playerId: authUser.id,
                         })
                     }
                 />
