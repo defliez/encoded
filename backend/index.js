@@ -102,6 +102,116 @@ app.post("/npc-chat", async (req, res) => {
     }
 });
 
+app.post("/npc-chat/first-message", async (req, res) => {
+    const { playerId, npcId } = req.body;
+
+    if (!playerId || !npcId) {
+        return res.status(400).json({ error: "Missing playerId or npcId" });
+    }
+
+    // Check if any previous messages exist
+    const { data: existing, error: existingError } = await supabase
+        .from("npc_chat_messages")
+        .select("id")
+        .eq("player_id", playerId)
+        .eq("npc_id", npcId)
+        .limit(1);
+
+    if (existingError) {
+        console.error(existingError);
+        return res.status(500).json({ error: "Failed to check history" });
+    }
+
+    if (existing.length > 0) {
+        return res.status(200).json({ alreadyStarted: true });
+    }
+
+    // Fetch intro
+    const { data: npcData, error: npcError } = await supabase
+        .from("npcs")
+        .select("intro")
+        .eq("id", npcId)
+        .single();
+
+    if (npcError || !npcData) {
+        console.error(npcError || "NPC not found");
+        return res.status(500).json({ error: "Failed to fetch NPC intro" });
+    }
+
+    // Ask Gemini to generate a greeting based on intro
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    contents: [
+                        {
+                            parts: [
+                                {
+                                    text: `${npcData.intro}\n\nWrite a brief in-character greeting message as the NPC.`,
+                                },
+                            ],
+                        },
+                    ],
+                }),
+            }
+        );
+
+        const json = await response.json();
+        const greeting = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!greeting) {
+            return res.status(500).json({ error: "No greeting from Gemini" });
+        }
+
+        // Save greeting
+        await supabase.from("npc_chat_messages").insert([
+            {
+                player_id: playerId,
+                npc_id: npcId,
+                from_role: "npc",
+                text: greeting,
+            },
+        ]);
+
+        res.status(200).json({ alreadyStarted: false, greeting });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to generate greeting" });
+    }
+});
+
+
+app.get("/npc-chat/history", async (req, res) => {
+    const { playerId, npcId } = req.query;
+
+    if (!playerId || !npcId) {
+        return res.status(400).json({ error: "Missing playerId or npcId" });
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from("npc_chat_messages")
+            .select("from_role, text, created_at")
+            .eq("player_id", playerId)
+            .eq("npc_id", npcId)
+            .order("created_at", { ascending: true });
+
+        if (error) {
+            console.error(error);
+            return res.status(500).json({ error: "Failed to fetch chat history" });
+        }
+
+        res.json({ history: data });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Unexpected error" });
+    }
+});
+
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
