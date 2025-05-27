@@ -38,6 +38,7 @@ function ActiveMissionsStack() {
         <Stack.Navigator>
             <Stack.Screen name="ActiveMissionsScreen" component={ActiveMissionsScreen} options={{ title: 'Active Missions' }} />
             <Stack.Screen name="MissionDetails" component={MissionDetails} options={{ title: 'Mission Details' }} />
+            <Stack.Screen name="NPCChat" component={NPCChat} options={{ title: 'Contact NPC' }} />
         </Stack.Navigator>
     );
 }
