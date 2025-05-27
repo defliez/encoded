@@ -1,6 +1,9 @@
+// NPCChat.js
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { supabase } from './supabaseClient';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
 export default function NPCChat({ route }) {
     const { npcId } = route.params;
@@ -49,6 +52,7 @@ export default function NPCChat({ route }) {
         setInput('');
 
         const npcReplyText = await getGeminiReply(userMessage.text);
+        // const npcReplyText = await getGeminiReply([...messages, userMessage]);
 
         const npcReply = {
             id: Date.now().toString() + "-npc",
@@ -61,20 +65,24 @@ export default function NPCChat({ route }) {
 
     const getGeminiReply = async (playerMessage) => {
         try {
-            const res = await fetch('http://172.20.10.4:3000/npc-chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            const res = await fetch(`http://${BACKEND_URL}:3000/npc-chat`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
                 body: JSON.stringify({
                     npcId,
-                    playerId: '00000000-0000-0000-0000-000000000000', // or your actual playerId
-                    playerMessage,
+                    playerId: '00000000-0000-0000-0000-000000000000', // or actual player ID
+                    playerMessage, // <-- make sure this line exists and is not empty
                 }),
             });
 
             const data = await res.json();
-            return data.reply || '...';
-        } catch (error) {
-            console.error("Gemini API error:", error);
+            console.log("data", data);
+            console.log("data.reply", data.reply);
+            return data.reply || "...";
+        } catch (err) {
+            console.error("Gemini API error:", err);
             return "I... can't respond right now.";
         }
     };
