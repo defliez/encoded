@@ -168,7 +168,7 @@ app.post("/npc-chat/first-message", async (req, res) => {
         .limit(1);
 
     if (existingError) {
-        console.error(existingError);
+        console.error("Supabase query failed:", existingError);
         return res.status(500).json({ error: "Failed to check history" });
     }
 
