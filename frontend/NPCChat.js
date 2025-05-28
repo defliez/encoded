@@ -29,7 +29,7 @@ export default function NPCChat({ route }) {
                 if (error) console.error(error);
                 else setNpc(data);
 
-                const res = await fetch(`http://${BACKEND_URL}:3000/npc-chat/first-message`, {
+                const res = await fetch(`${BACKEND_URL}/npc-chat/first-message`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -41,7 +41,7 @@ export default function NPCChat({ route }) {
                 const json = await res.json();
 
                 // Then fetch all history
-                const historyRes = await fetch(`http://${BACKEND_URL}:3000/npc-chat/history?playerId=${authUser.id}&npcId=${npcId}`);
+                const historyRes = await fetch(`${BACKEND_URL}/npc-chat/history?playerId=${authUser.id}&npcId=${npcId}`);
                 const historyJson = await historyRes.json();
 
                 if (historyJson.history) {
@@ -89,7 +89,7 @@ export default function NPCChat({ route }) {
 
     const getGeminiReply = async (playerMessage) => {
         try {
-            const res = await fetch(`http://${BACKEND_URL}:3000/npc-chat`, {
+            const res = await fetch(`${BACKEND_URL}/npc-chat`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
