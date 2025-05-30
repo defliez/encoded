@@ -1,8 +1,9 @@
 // NPCChat.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { supabase } from './supabaseClient';
 import { useUser } from './UserContext';
+import TypewriterText from './components/TypewriterText';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -12,6 +13,9 @@ export default function NPCChat({ route }) {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(true);
+    const [lastAnimatedId, setLastAnimatedId] = useState(null);
+
+    const flatListRef = useRef(null);
 
     const { authUser } = useUser();
 
@@ -85,6 +89,10 @@ export default function NPCChat({ route }) {
         };
 
         setMessages((prev) => [...prev, npcReply]);
+        setLastAnimatedId(npcReply.id);
+        setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+        }, 50);
     };
 
     const getGeminiReply = async (playerMessage) => {
@@ -122,18 +130,33 @@ export default function NPCChat({ route }) {
             <Text style={styles.header}>{npc?.name}</Text>
 
             <FlatList
+                ref={flatListRef}
                 data={messages}
                 keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                    <View
-                        style={[
-                            styles.bubble,
-                            item.from === 'npc' ? styles.npcBubble : styles.playerBubble,
-                        ]}
-                    >
-                        <Text style={styles.bubbleText}>{item.text}</Text>
-                    </View>
-                )}
+                renderItem={({ item }) => {
+                    const isAnimating = item.from === 'npc' && item.id === lastAnimatedId;
+                    return (
+                        <View
+                            style={[styles.bubble, item.from === 'npc' ? styles.npcBubble : styles.playerBubble]}>
+                            {item.from === 'npc' && isAnimating
+                                ? (
+                                    <TypewriterText
+                                        content={item.text}
+                                        speed={30}
+                                        style={styles.bubbleText}
+                                        onTypingComplete={() => {
+                                            setLastAnimatedId(null);
+                                            flatListRef.current?.scrollToEnd({ animated: true });
+                                        }}
+                                    />
+                                )
+                                : <Text style={styles.bubbleText}>{item.text}</Text>
+                            }
+                        </View>
+                    );
+                }}
+                onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
                 contentContainerStyle={{ padding: 12 }}
             />
 
