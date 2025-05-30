@@ -100,6 +100,7 @@ app.post("/npc-chat", async (req, res) => {
             "Agent Cipher": "CIPHER CONFIRMS",
             "Agent Calculator": "CALCULATOR PROTOCOL COMPLETE",
             "Agent Noodle": "NOODLE NETWORK ACTIVATED",
+            "Agent Mastermind": "MASTERMIND PROTOCOL INITIATED",
         };
 
         const npcNameRes = await supabase
