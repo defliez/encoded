@@ -40,12 +40,6 @@ Coming soon to the App Store 🚀
 
 ---
 
-## 📱 Screenshots (coming soon)
-
-[Optional: add gameplay or UI images here later.]
-
----
-
 ## 📬 Contact
 
 Questions, feedback, or interest in collaboration?  
