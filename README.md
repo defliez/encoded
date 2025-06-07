@@ -1,72 +1,53 @@
-sadfasdf# Spy Alternate Reality Game
+# ENCODED
 
-## Stack & Tools
-**Frontend**:
-- React Native (JS)
-- Expo
-
-**Backend**:
-- **Lovable** 
-    - Storylines, campaigns & npc personalities
-- **Gemini**
-    - Npc conversations
-
-**Database**:
-- Supabase
+> A GPS-based mobile ARG (Alternate Reality Game) built during the Mashup AI Hackathon 2025.  
+> Powered by React Native, Supabase, Gemini API, and real-world spy vibes.
 
 ---
 
-## MVP features
-#### Location-based campaigns and missions
-_examples:_
-- _malicious entity has set up base in pildammsparken_
-    - _deliver package from a to b_
+## 🕵️ What is ENCODED?
 
-**Types of missions:**
-- Deliver package A ---> B
-- Eavesdrop
-    - gain sensitive information
-- Hack: Download
-    - steal mission
-- Hack: Upload
-    - infiltrate mission
+ENCODED is a mobile spy game where players take on missions in the real world, guided by AI-powered NPCs and interactive map-based objectives. The prototype was developed in under 24 hours at the Mashup AI Hackathon 2025 and is currently being actively developed with plans to launch on the App Store and Google Play.
 
 ---
 
-## Extra features
+## 🧠 Tech Stack
 
-### Missions that need multiple players
-- One player can start the mission by themself.
-- Other players get notified that this mission requires another player.
-    - This becomes a singular mission past stage 1 for the second player, where they reap the rewards of their individual contribution
+- **Frontend:** React Native (Expo)
+- **Backend:** Node.js with Express
+- **Database & Auth:** Supabase
+- **AI:** Gemini API for natural language NPCs
+- **Maps:** Google Maps SDK (real-world mission locations)
+- **Deployment:** Render (backend), TestFlight (iOS distribution)
 
-### Reputation
-- Players can rate other players
-- Players' reputation affects their priority of being able to engage in followup missions
+---
 
-### Activities that are not gps based
-- Choose "class" or klan to belong to
-- You have ur own party/agency
-    - can interact with other mercenaries
+## 🎯 Key Features
 
-    - Sell stolen info from agencies on black market
+- AI-driven NPC conversations via Gemini API
+- Location-based missions with real map integration
+- Authentication and session management with Supabase
+- Live backend deployment and cloud database
+- Cross-platform architecture via Expo
+- App distributed via iOS TestFlight
 
-- Maybe have a home-base/terminal that you can only do stuff when ur home
+---
 
-### Incentives to go out
-- agents that you send out are a lot slower or cant perform specific tasks
+## 🚧 Status
 
+The project is under active development.  
+Coming soon to the App Store 🚀
 
-### Stats & RNG
-Player has stats for differnet abilities, chance of success of actions get affected accordingly.
+---
 
-**RNG implementation:** 
+## 📱 Screenshots (coming soon)
 
-_even if i have low stats a gamble can make me succeed_
+[Optional: add gameplay or UI images here later.]
 
-    - represent as ai? can be sold on black market
-        - ai's on black market run the risk of being compromised with back doors or key loggers
+---
 
+## 📬 Contact
 
-
+Questions, feedback, or interest in collaboration?  
+Reach out at [valentinoglave@protonmail.com](mailto:valentinoglave@protonmail.com)  or visit my [LinkedIn](https://linkedin.com/in/valentinoglave)
 
