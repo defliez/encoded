@@ -43,5 +43,8 @@ Coming soon to the App Store 🚀
 ## 📬 Contact
 
 Questions, feedback, or interest in collaboration?  
-Reach out at [valentinoglave@protonmail.com](mailto:valentinoglave@protonmail.com)  or visit my [LinkedIn](https://linkedin.com/in/valentinoglave)
+Reach out:
+- [valentinoglave@protonmail.com](mailto:valentinoglave@protonmail.com) or [LinkedIn](https://linkedin.com/in/valentinoglave)
+- [kotybasyed@gmail.com](mailto:kotybasyed@gmail.com) or [LinkedIn](https://www.linkedin.com/in/kotayba-sayed/)
+
 
