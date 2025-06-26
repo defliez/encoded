@@ -2,11 +2,13 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, Switch, ScrollView, Button, Alert, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import { useUser } from './UserContext';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { supabase } from './supabaseClient';
 
 const AgentProfile = () => {
-    const { authUser, loading: userLoading, error } = useUser();
+    const { authUser, loading: userLoading, signOut, error } = useUser();
+
+    const navigation = useNavigation();
 
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [allowNotifications, setAllowNotification] = useState(false);
@@ -62,10 +64,11 @@ const AgentProfile = () => {
     );
 
     const handleLogout = async () => {
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-            Alert.alert('Logout failed', error.message);
-        }
+        await signOut();
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+        });
     };
 
     if (userLoading) {
