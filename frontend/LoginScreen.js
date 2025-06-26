@@ -10,6 +10,7 @@ export default function LoginScreen({ navigation }) {
     const [codename, setCodename] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [signUpSelected, setSignUpSelected] = useState(false);
 
     const { signIn, player } = useUser();
 
@@ -37,6 +38,7 @@ export default function LoginScreen({ navigation }) {
     const handleSignup = async () => {
         setError('');
         setIsLoading(true);
+        setSignUpSelected(true);
         try {
             const data = await signUp(email, password, codename);
             console.log("Sign up success", data);
@@ -52,13 +54,21 @@ export default function LoginScreen({ navigation }) {
         }
     };
 
+    const switchLayout = async () => {
+        setSignUpSelected(!signUpSelected);
+    }
+
 
     return (
         <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
+        { signUpSelected ?
+        <Text style={styles.title}>Agent Signup</Text>
+            :
         <Text style={styles.title}>Agent Login</Text>
+        }
 
         <TextInput
         placeholder="Email"
@@ -70,14 +80,16 @@ export default function LoginScreen({ navigation }) {
         keyboardType="email-address"
         />
 
-        <TextInput
-        placeholder="Codename"
-        placeholderTextColor="#888"
-        style={styles.input}
-        value={codename}
-        onChangeText={setCodename}
-        />
-
+        {signUpSelected ? (
+            <TextInput
+            placeholder="Codename"
+            placeholderTextColor="#888"
+            style={styles.input}
+            value={codename}
+            onChangeText={setCodename}
+            />
+        ) : ( <></> )
+        }
 
         <TextInput
         placeholder="Password"
@@ -90,14 +102,31 @@ export default function LoginScreen({ navigation }) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={isLoading}>
-        <Text style={styles.buttonText}>Login</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={handleSignup} disabled={isLoading}>
-        <Text style={styles.buttonText}>Sign Up</Text>
-        </TouchableOpacity>
-        </View>
+        { signUpSelected ? (
+            <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.button} onPress={handleSignup} disabled={isLoading}>
+            <Text style={styles.buttonText}>Sign up</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.or}>or</Text>
+
+            <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={switchLayout} disabled={isLoading}>
+            <Text style={styles.buttonText}>Log in</Text>
+            </TouchableOpacity>
+            </View>
+        ) : (
+            <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={isLoading}>
+            <Text style={styles.buttonText}>Log in</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.or}>or</Text>
+
+            <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={switchLayout} disabled={isLoading}>
+            <Text style={styles.buttonText}>Sign up</Text>
+            </TouchableOpacity>
+            </View>
+        )}
         </KeyboardAvoidingView>
     );
 }
@@ -116,6 +145,14 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 24,
     },
+    or: {
+        fontSize: 14,
+        color: '#fff',
+        textAlign: 'center',
+        marginTop: 4,
+        marginBottom: 4,
+
+    },
     input: {
         backgroundColor: '#222',
         color: '#fff',
@@ -131,19 +168,23 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     buttonRow: {
-        flexDirection: 'row',
+        flexDirection: 'column',
         justifyContent: 'space-between',
         gap: 12,
     },
     button: {
-        flex: 1,
+        // flex: 1,
         backgroundColor: '#007AFF',
-        padding: 12,
+        padding: 18,
         borderRadius: 8,
         alignItems: 'center',
+        // marginLeft: 48,
+        // marginRight: 48,
     },
     secondaryButton: {
-        backgroundColor: '#555',
+        backgroundColor: '#222',
+        marginLeft: 48,
+        marginRight: 48,
     },
     buttonText: {
         color: '#fff',
