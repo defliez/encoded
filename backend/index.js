@@ -3,7 +3,8 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { supabase } from "./supabaseClient.js";
-import pcgRouter from './pcg.js';
+import pcgRouter from "./pcg.js";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -264,6 +265,198 @@ app.get("/npc-chat/history", async (req, res) => {
     }
 });
 
+function haversineMeters(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = d => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) ** 2;
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+async function fetchParksNear(lat, lng, radius = 800) {
+    const q = `
+    [out:json][timeout:45];
+    (
+        node(around:${radius},${lat},${lng})[leisure=park];
+        way(around:${radius},${lat},${lng})[leisure=park];
+        relation(around:${radius},${lat},${lng})[leisure=park];
+    );
+    out tags center;
+    `;
+
+    const mirrors = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://z.overpass-api.de/api/interpreter",
+        "https://overpass.openstreetmap.ru/api/interpreter",
+    ];
+
+    let raw;
+    const ua = "encoded-game/pcg (contact: valentinoglave@protonmail.com)";
+    for (const url of mirrors) {
+        try {
+            const r = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain", "User-Agent": ua },
+                body: q,
+            });
+            if (!r.ok) continue;
+            raw = await r.json();
+            break;
+        } catch {}
+    }
+    if (!raw?.elements?.length) return [];
+
+    // normalize (like your pcg.js parser)
+    const parks = raw.elements
+        .map(el => {
+            const tags = el.tags || {};
+            const name = tags.name || null;
+            const lat0 = el.lat ?? el.center?.lat;
+            const lng0 = el.lon ?? el.center?.lon;
+            if (lat0 == null || lng0 == null) return null;
+            return {
+                id: `${el.type}/${el.id}`,
+                name,
+                category: "park",
+                lat: lat0,
+                lng: lng0,
+            };
+        })
+        .filter(Boolean);
+
+    return parks;
+}
+
+async function getOrCreateNpcId() {
+    const { data: npcs, error } = await supabase
+        .from("npcs")
+        .select("id")
+        .limit(20);
+    if (!error && npcs && npcs.length) {
+        const pick = npcs[Math.floor(Math.random() * npcs.length)];
+        return pick.id;
+    }
+
+    const handler = {
+        name: "Handler",
+        role: "handler",
+        intro:
+        "I’m your handler. Keep a low profile. Follow instructions precisely and report back.",
+        Archetype: "handler",
+    };
+    const { data: inserted, error: insErr } = await supabase
+        .from("npcs")
+        .insert(handler)
+        .select("id")
+        .single();
+    if (insErr) throw insErr;
+    return inserted.id;
+}
+
+// simple title/description templates
+function makeCodename(seed) {
+    const words = ["EMBER", "ORION", "GLASS", "PHANTOM", "VECTOR", "ECHO", "HARBOR", "NIMBUS"];
+    const n = seed % words.length;
+    return words[n];
+}
+function makeMissionText(park, seed) {
+    const code = makeCodename(seed);
+    const title = `Operation ${code}`;
+    const spot = park.name ? `at **${park.name}**` : "near the marked park";
+    const description =
+        `Briefing: Meet your handler ${spot}. Retrieve the cache, decode the strip, ` +
+        `and await further instructions. Keep it discreet.`;
+    return { title, description };
+}
+
+// avoid duplicate missions within ~40 m of this POI
+async function isDuplicateMission(park) {
+    // cheap pre-filter: look for missions within ~0.0005 deg (~55 m) box
+    const delta = 0.0005;
+    const { data: near, error } = await supabase
+        .from("missions")
+        .select("id,lat,lon")
+        .gte("lat", park.lat - delta)
+        .lte("lat", park.lat + delta)
+        .gte("lon", park.lng - delta)
+        .lte("lon", park.lng + delta);
+
+    if (error) return false; // be permissive if query fails
+
+    for (const m of near || []) {
+        const d = haversineMeters(park.lat, park.lng, m.lat, m.lon);
+        if (d <= 40) return true;
+    }
+    return false;
+}
+
+app.post("/pcg/mission", async (req, res) => {
+    try {
+        const { lat, lng, radius = 800, seed } = req.body || {};
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return res.status(400).json({ error: "lat,lng required" });
+        }
+
+        const parks = await fetchParksNear(lat, lng, Math.min(radius, 1500));
+        if (!parks.length) {
+            return res.status(404).json({ error: "no_parks_found" });
+        }
+
+        // score: prefer named + closer
+        const scored = parks
+            .map(p => ({
+                park: p,
+                score:
+                (p.name ? 2 : 0) - (haversineMeters(lat, lng, p.lat, p.lng) / 400), // ~-1 per 400m
+            }))
+            .sort((a, b) => b.score - a.score);
+
+        // pick the first non-duplicate candidate
+        let chosen = null;
+        for (const s of scored) {
+            const dup = await isDuplicateMission(s.park);
+            if (!dup) { chosen = s.park; break; }
+        }
+        if (!chosen) {
+            return res.status(409).json({ error: "duplicate_nearby", message: "Missions already exist near every candidate park within 40m." });
+        }
+
+        const missionSeed = Number.isFinite(seed) ? seed : Math.floor(Math.random() * 1e9);
+        const { title, description } = makeMissionText(chosen, missionSeed);
+
+        const npcId = await getOrCreateNpcId();
+
+        // insert into missions and return the row
+        const { data: inserted, error: insErr } = await supabase
+            .from("missions")
+            .insert({
+                title,
+                description,
+                lat: chosen.lat,
+                lon: chosen.lng,
+                npc_id: npcId,
+                // opens_at: null,
+                // closes_at: null,
+            })
+            .select("*")
+            .single();
+
+        if (insErr) {
+            console.error(insErr);
+            return res.status(500).json({ error: "insert_failed" });
+        }
+
+        return res.json({ mission: inserted });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "server_error", details: String(e).slice(0, 300) });
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

@@ -68,36 +68,36 @@ router.get('/pois', async (req, res) => {
             way(around:${radius},${lat},${lng})[leisure=park];
             relation(around:${radius},${lat},${lng})[leisure=park];
 
-            // gardens & recreation grounds
-            node(around:${radius},${lat},${lng})[leisure=garden];
-            way(around:${radius},${lat},${lng})[leisure=garden];
-            relation(around:${radius},${lat},${lng})[leisure=garden];
-
-            node(around:${radius},${lat},${lng})[landuse=recreation_ground];
-            way(around:${radius},${lat},${lng})[landuse=recreation_ground];
-            relation(around:${radius},${lat},${lng})[landuse=recreation_ground];
-
-            // squares / plazas
-            node(around:${radius},${lat},${lng})[place=square];
-            way(around:${radius},${lat},${lng})[place=square];
-            relation(around:${radius},${lat},${lng})[place=square];
-
-            // indoor / landmarks
-            node(around:${radius},${lat},${lng})[tourism=attraction];
-            way(around:${radius},${lat},${lng})[tourism=attraction];
-            relation(around:${radius},${lat},${lng})[tourism=attraction];
-
-            node(around:${radius},${lat},${lng})[tourism=museum];
-            way(around:${radius},${lat},${lng})[tourism=museum];
-            relation(around:${radius},${lat},${lng})[tourism=museum];
-
-            node(around:${radius},${lat},${lng})[amenity=library];
-            way(around:${radius},${lat},${lng})[amenity=library];
-            relation(around:${radius},${lat},${lng})[amenity=library];
-
-            node(around:${radius},${lat},${lng})[shop=mall];
-            way(around:${radius},${lat},${lng})[shop=mall];
-            relation(around:${radius},${lat},${lng})[shop=mall];
+            // // gardens & recreation grounds
+            // node(around:${radius},${lat},${lng})[leisure=garden];
+            // way(around:${radius},${lat},${lng})[leisure=garden];
+            // relation(around:${radius},${lat},${lng})[leisure=garden];
+            //
+            // node(around:${radius},${lat},${lng})[landuse=recreation_ground];
+            // way(around:${radius},${lat},${lng})[landuse=recreation_ground];
+            // relation(around:${radius},${lat},${lng})[landuse=recreation_ground];
+            //
+            // // squares / plazas
+            // node(around:${radius},${lat},${lng})[place=square];
+            // way(around:${radius},${lat},${lng})[place=square];
+            // relation(around:${radius},${lat},${lng})[place=square];
+            //
+            // // indoor / landmarks
+            // node(around:${radius},${lat},${lng})[tourism=attraction];
+            // way(around:${radius},${lat},${lng})[tourism=attraction];
+            // relation(around:${radius},${lat},${lng})[tourism=attraction];
+            //
+            // node(around:${radius},${lat},${lng})[tourism=museum];
+            // way(around:${radius},${lat},${lng})[tourism=museum];
+            // relation(around:${radius},${lat},${lng})[tourism=museum];
+            //
+            // node(around:${radius},${lat},${lng})[amenity=library];
+            // way(around:${radius},${lat},${lng})[amenity=library];
+            // relation(around:${radius},${lat},${lng})[amenity=library];
+            //
+            // node(around:${radius},${lat},${lng})[shop=mall];
+            // way(around:${radius},${lat},${lng})[shop=mall];
+            // relation(around:${radius},${lat},${lng})[shop=mall];
         );
         out tags center;
         `;
@@ -113,13 +113,13 @@ router.get('/pois', async (req, res) => {
 
             const cat =
                 tags.leisure === "park" ? "park" :
-                tags.leisure === "garden" ? "garden" :
-                tags.landuse === "recreation_ground" ? "recreation" :
-                tags.place === "square" ? "square" :
-                tags.tourism === "attraction" ? "attraction" :
-                tags.tourism === "museum" ? "museum" :
-                tags.amenity === "library" ? "library" :
-                tags.shop === "mall" ? "mall" :
+                // tags.leisure === "garden" ? "garden" :
+                // tags.landuse === "recreation_ground" ? "recreation" :
+                // tags.place === "square" ? "square" :
+                // tags.tourism === "attraction" ? "attraction" :
+                // tags.tourism === "museum" ? "museum" :
+                // tags.amenity === "library" ? "library" :
+                // tags.shop === "mall" ? "mall" :
                 null;
             if (!cat) continue;
 
