@@ -14,6 +14,9 @@ import blueEye from './assets/view.png';
 import redEye from './assets/technology.png';
 import blackEye from './assets/focus.png';
 
+//temp for testing
+const API_BASE = 'http://192.168.0.229:3000';
+
 function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -33,6 +36,9 @@ export default function MapScreen({ navigation }) {
     const [missions, setMissions] = useState([]);
     const [acceptedMissions, setAcceptedMissions] = useState({});
     const [loading, setLoading] = useState(true);
+
+    const [pois, setPois] = useState([]);
+    const [loadingPois, setLoadingPois] = useState(false);
 
     const { authUser, loading: userLoading } = useUser();
 
@@ -84,6 +90,25 @@ export default function MapScreen({ navigation }) {
                         setMissions(filtered);
                         setAcceptedMissions(participationMap);
                     }
+
+                    // --- fetch OSM POIs for pcg testing ---
+                    if (isActive && loc?.coords) {
+                        setLoadingPois(true);
+                        try {
+                            const { latitude, longitude } = loc.coords;
+                            // const latitude = 55.6050;
+                            // const longitude = 13.0038;
+                            const url = `${API_BASE}/pcg/pois?lat=${latitude}&lng=${longitude}&radius=1200`;
+                            const resp = await fetch(url);
+                            if (!resp.ok) throw new Error(`POI fetch failed: ${resp.status}`);
+                            const json = await resp.json();
+                            if (isActive) setPois(json.pois || []);
+                        } catch (e) {
+                            console.warn('POI fetch error:', e);
+                        } finally {
+                            if (isActive) setLoadingPois(false);
+                        }
+                    }
                 } catch (err) {
                     console.error('Error fetching map data:', err);
                 } finally {
@@ -126,6 +151,16 @@ export default function MapScreen({ navigation }) {
                     strokeColor="rgba(0,0,0,0.3)"
                     fillColor="rgba(0,255,0,0.1)"
                 />
+
+                {/* --- PCG: show POIs (green pins) for sanity check --- */}
+                {pois.map((p) => (
+                    <Marker
+                        key={`poi-${p.id}`}
+                        coordinate={{ latitude: p.lat, longitude: p.lng }}
+                        title={p.name || p.category}
+                        pinColor="green"
+                    />
+                ))}
 
                 {missions.map((mission) => {
                     const distance = getDistanceFromLatLonInMeters(
@@ -173,6 +208,9 @@ export default function MapScreen({ navigation }) {
                     );
                 })}
             </MapView>
+            {loadingPois && (
+                <ActivityIndicator style={{ position:'absolute', top: 16, right: 16 }} />
+            )}
         </View>
     );
 }

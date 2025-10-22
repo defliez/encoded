@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { supabase } from "./supabaseClient.js";
+import pcgRouter from './pcg.js';
 
 dotenv.config();
 
@@ -12,6 +13,7 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/pcg', pcgRouter);
 
 app.get("/health", (req, res) => {
     res.send("OK");
