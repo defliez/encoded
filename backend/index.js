@@ -440,6 +440,14 @@ app.post("/pcg/mission", async (req, res) => {
                 lat: chosen.lat,
                 lon: chosen.lng,
                 npc_id: npcId,
+                seed: missionSeed,
+                generator: {
+                    algo: "parks-v1",
+                    player: { lat, lng },
+                    radius,
+                    chosen,
+                    top5: scored.slice(0,5).map(s => ({ id: s.park.id, score: s.score })),
+                },
                 // opens_at: null,
                 // closes_at: null,
             })
