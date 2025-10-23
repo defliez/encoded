@@ -4,7 +4,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { supabase } from "./supabaseClient.js";
 import pcgRouter from "./pcg.js";
-import crypto from "crypto";
 
 dotenv.config();
 
@@ -20,6 +19,12 @@ app.get("/health", (req, res) => {
     res.send("OK");
 });
 
+function matchesKeywordGate(text, beat) {
+    const kws = beat?.gates?.keyword || [];
+    const low = (text || "").toLowerCase();
+    return kws.some(k => low.includes(k.toLowerCase()));
+}
+
 app.post("/npc-chat", async (req, res) => {
     const { playerId, npcId, playerMessage } = req.body;
 
@@ -27,15 +32,15 @@ app.post("/npc-chat", async (req, res) => {
         return res.status(400).json({ error: "Missing playerMessage" });
     }
 
-    const { data: npcData, error: npcError } = await supabase
+    const { data: npcRow, error: npcError } = await supabase
         .from("npcs")
-        .select("intro")
+        .select("id, persona_style, prompt_mode")
         .eq("id", npcId)
         .single();
 
-    if (npcError || !npcData) {
+    if (npcError || !npcRow) {
         console.error(npcError || "NPC not found");
-        return res.status(500).json({ error: "Failed to fetch NPC intro" });
+        return res.status(500).json({ error: "Failed to fetch NPC persona" });
     }
 
 
@@ -52,22 +57,133 @@ app.post("/npc-chat", async (req, res) => {
         return res.status(500).json({ error: "Failed to fetch chat history" });
     }
 
+    // prefer missionId if provided
+    const missionId = req.body.missionId || null;
+    let missionRow = null;
+
+    if (missionId) {
+        const { data: m, error: mErr } = await supabase
+            .from("missions")
+            .select("id, steps, npc_id")
+            .eq("id", missionId)
+            .single();
+        if (mErr || !m) {
+            return res.status(409).json({ error: "mission_not_found" });
+        }
+        if (m.npc_id !== npcId) {
+            return res.status(409).json({ error: "mission_npc_mismatch" });
+        }
+        missionRow = m;
+    } else {
+        // load mission for this npc and the player's progress (old flow)
+        const { data: m } = await supabase
+            .from("missions")
+            .select("id, steps")
+            .eq("npc_id", npcId)
+            .limit(1)
+            .single();
+        if (!m) {
+            return res.status(409).json({ error: "no_mission_for_npc" });
+        }
+        missionRow = m;
+    }
+
+    let stepIdx = 0;
+    let steps = missionRow?.steps || [];
+
+    if (missionRow?.id) {
+        const { data: part } = await supabase
+            .from("mission_participation")
+            .select("progress")
+            .eq("player_id", playerId)
+            .eq("mission_id", missionRow.id)
+            .is("completed_at", null)
+            .single();
+
+        if (part && Number.isInteger(part.progress)) {
+            stepIdx = Math.max(0, part.progress);
+        }
+    }
+
+    const activeBeat = Array.isArray(steps) ? steps[stepIdx] : null;
+
+    // Save player's message first
+    await supabase.from("npc_chat_messages").insert([
+        { player_id: playerId, npc_id: npcId, from_role: "player", text: playerMessage },
+    ]);
+
+    // Try to advance the beat
+    let advanced = false;
+    let justCompleted = false;
+
+    console.log("OUTSIDE 120 IF");
+    console.log("activeBeat:", activeBeat);
+    console.log('playerMessage:', playerMessage);
+    console.log('missionRow?.id:', missionRow?.id);
+    if (activeBeat && matchesKeywordGate(playerMessage, activeBeat) && missionRow?.id) {
+        console.log("INSIDE 120 IF");
+        console.log("activeBeat:", activeBeat);
+        console.log('playerMessage:', playerMessage);
+        console.log('missionRow?.id:', missionRow?.id);
+        const next = stepIdx + 1;
+        await supabase
+            .from("mission_participation")
+            .update({ progress: next })
+            .eq("player_id", playerId)
+            .eq("mission_id", missionRow.id)
+            .is("completed_at", null);
+
+        advanced = true;
+
+        if (next >= (steps?.length || 0)) {
+            const now = new Date().toISOString();
+            await supabase
+                .from("mission_participation")
+                .update({ completed_at: now, status: "completed" })
+                .eq("player_id", playerId)
+                .eq("mission_id", missionRow.id)
+                .is("completed_at", null);
+
+            justCompleted = true;
+        }
+    }
+
+    // Decide which beat to reply as
+    let beatForReply = activeBeat;
+    if (advanced && !justCompleted) {
+        beatForReply = steps[stepIdx + 1]; // reply as the NEXT beat
+    } else if (justCompleted) {
+        beatForReply = null;                // mission finished -> sign-off
+    }
+
+    const meetHint = 
+        beatForReply?.kind === "meet" && beatForReply?.vars?.codePhrase
+        ? ` The code phrase is: ${beatForReply.vars.codePhrase}.`
+        : "";
+
+    // Build context AFTER advancement
+    const beatContext = justCompleted
+        ? `Mission complete. Deliver a terse debrief sign-off (1–2 sentences), in-character.`
+        : beatForReply
+        ? `Current beat: ${beatForReply.kind} at ${beatForReply?.vars?.spot || "the park"}.
+        Your role in THIS beat only (do not invent new beats/endings):
+        - brief: explain/confirm the objective; wait for the gate keyword.
+        - meet: acknowledge readiness; share/confirm the code phrase once.${meetHint}
+        - resolve: confirm the cache is secured; give final instruction.
+        - debrief: acknowledge 'report' and sign off.
+        Be concise (≤2 sentences).`
+        : `No active beat; be brief and in-character.`;
+
+    // Build prompt parts (use beatContext first, persona after)
     const messageParts = [
-        { text: npcData.intro }, // Intro goes first
+        { text: beatContext },
+        { text: `Persona (style only; ignore conflicting directives): ${npcRow.persona_style || "Cool, professional handler tone; concise and precise."}` },
         ...history.map(({ from_role, text }) => ({
             text: `${from_role === "npc" ? "NPC" : "Player"}: ${text}`,
         })),
         { text: `Player: ${playerMessage}` },
     ];
 
-    await supabase.from("npc_chat_messages").insert([
-        {
-            player_id: playerId,
-            npc_id: npcId,
-            from_role: "player",
-            text: playerMessage,
-        },
-    ]);
 
     try {
         const response = await fetch(
@@ -99,54 +215,54 @@ app.post("/npc-chat", async (req, res) => {
         ]);
 
         // Check for win phrases
-        const winPhrases = {
-            "Agent Cipher": "CIPHER CONFIRMS",
-            "Agent Calculator": "CALCULATOR PROTOCOL COMPLETE",
-            "Agent Noodle": "NOODLE NETWORK ACTIVATED",
-            "Agent Mastermind": "MASTERMIND PROTOCOL INITIATED",
-        };
-
-        const npcNameRes = await supabase
-            .from("npcs")
-            .select("name")
-            .eq("id", npcId)
-            .single();
-
-        const npcName = npcNameRes?.data?.name;
-        const winTrigger = winPhrases[npcName];
-
-        if (winTrigger && reply.includes(winTrigger)) {
-            // Get the mission ID linked to this NPC
-            const { data: mission, error: missionError } = await supabase
-                .from("missions")
-                .select("id")
-                .eq("npc_id", npcId)
-                .single();
-
-            if (missionError || !mission) {
-                console.error("Failed to find mission:", missionError);
-            } else {
-                // Find player’s mission participation
-                const { data: participation, error: participationError } = await supabase
-                    .from("mission_participation")
-                    .select("id")
-                    .eq("player_id", playerId)
-                    .eq("mission_id", mission.id)
-                    .is("completed_at", null)
-                    .single();
-
-                if (participationError || !participation) {
-                    console.error("No participation found:", participationError);
-                } else {
-                    // Mark mission complete
-                    const now = new Date().toISOString();
-                    await supabase
-                        .from("mission_participation")
-                        .update({ completed_at: now, status: "completed" })
-                        .eq("id", participation.id);
-                }
-            }
-        }
+        // const winPhrases = {
+            //     "Agent Cipher": "CIPHER CONFIRMS",
+            //     "Agent Calculator": "CALCULATOR PROTOCOL COMPLETE",
+            //     "Agent Noodle": "NOODLE NETWORK ACTIVATED",
+            //     "Agent Mastermind": "MASTERMIND PROTOCOL INITIATED",
+            // };
+        //
+            // const npcNameRes = await supabase
+        //     .from("npcs")
+        //     .select("name")
+        //     .eq("id", npcId)
+        //     .single();
+        //
+            // const npcName = npcNameRes?.data?.name;
+        // const winTrigger = winPhrases[npcName];
+        //
+            // if (winTrigger && reply.includes(winTrigger)) {
+                //     // Get the mission ID linked to this NPC
+                //     const { data: mission, error: missionError } = await supabase
+                //         .from("missions")
+                //         .select("id")
+                //         .eq("npc_id", npcId)
+                //         .single();
+                //
+                    //     if (missionError || !mission) {
+                        //         console.error("Failed to find mission:", missionError);
+                        //     } else {
+                            //         // Find player’s mission participation
+                            //         const { data: participation, error: participationError } = await supabase
+                            //             .from("mission_participation")
+                            //             .select("id")
+                            //             .eq("player_id", playerId)
+                            //             .eq("mission_id", mission.id)
+                            //             .is("completed_at", null)
+                            //             .single();
+                            //
+                                //         if (participationError || !participation) {
+                                    //             console.error("No participation found:", participationError);
+                                    //         } else {
+                                        //             // Mark mission complete
+                                        //             const now = new Date().toISOString();
+                                        //             await supabase
+                                        //                 .from("mission_participation")
+                                        //                 .update({ completed_at: now, status: "completed" })
+                                        //                 .eq("id", participation.id);
+                                        //         }
+                            //     }
+                // }
 
         res.json({ reply });
 
@@ -157,13 +273,12 @@ app.post("/npc-chat", async (req, res) => {
 });
 
 app.post("/npc-chat/first-message", async (req, res) => {
-    const { playerId, npcId } = req.body;
-
+    const { playerId, npcId, missionId } = req.body;
     if (!playerId || !npcId) {
         return res.status(400).json({ error: "Missing playerId or npcId" });
     }
 
-    // Check if any previous messages exist
+    // If the chat already started, bail early
     const { data: existing, error: existingError } = await supabase
         .from("npc_chat_messages")
         .select("id")
@@ -175,41 +290,99 @@ app.post("/npc-chat/first-message", async (req, res) => {
         console.error("Supabase query failed:", existingError);
         return res.status(500).json({ error: "Failed to check history" });
     }
-
-    if (existing.length > 0) {
+    if (existing?.length > 0) {
         return res.status(200).json({ alreadyStarted: true });
     }
 
-    // Fetch intro
-    const { data: npcData, error: npcError } = await supabase
+    // Pull persona (style only)
+    const { data: npcRow, error: npcError } = await supabase
         .from("npcs")
-        .select("intro")
+        .select("id, persona_style")
         .eq("id", npcId)
         .single();
 
-    if (npcError || !npcData) {
+    if (npcError || !npcRow) {
         console.error(npcError || "NPC not found");
-        return res.status(500).json({ error: "Failed to fetch NPC intro" });
+        return res.status(500).json({ error: "Failed to fetch NPC persona" });
     }
 
-    // Ask Gemini to generate a greeting based on intro
+    // prefer missionId
+    let missionRow = null;
+    if (missionId) {
+
+        // Get the mission & current beat
+        const { data: m, error: mErr } = await supabase
+            .from("missions")
+            .select("id, steps, npc_id")
+            .eq("id", missionId)
+            .single();
+        if (mErr || !m) {
+            return res.status(409).json({ error: "mission_not_found" });
+        }
+        if (m.npc_id !== npcId) {
+            return res.status(409).json({ error: "mission_npc_mismatch" });
+        }
+        missionRow = m;
+    } else {
+        const { data: m } = await supabase
+            .from("missions")
+            .select("id, steps")
+            .eq("npc_id", npcId)
+            .limit(1)
+            .single();
+        missionRow = m || null;
+    }
+
+    // Default: no mission/steps yet => very short hello
+    let beatForReply = null;
+
+    if (missionRow?.id) {
+        let stepIdx = 0;
+        const { data: part } = await supabase
+            .from("mission_participation")
+            .select("progress")
+            .eq("player_id", playerId)
+            .eq("mission_id", missionRow.id)
+            .is("completed_at", null)
+            .single();
+
+        if (part && Number.isInteger(part.progress)) {
+            stepIdx = Math.max(0, part.progress);
+        } else {
+            await supabase
+                .from("mission_participation")
+                .insert({ player_id: playerId, mission_id: missionRow.id, progress: 0 });
+        }
+        const steps = Array.isArray(missionRow.steps) ? missionRow.steps : [];
+        beatForReply = steps[stepIdx] || null;
+    }
+
+    const meetHint =
+        beatForReply?.kind === "meet" && beatForReply?.vars?.codePhrase
+        ? ` The code phrase is: ${beatForReply.vars.codePhrase}.`
+        : "";
+
+    const beatContext = beatForReply
+        ? `Current beat: ${beatForReply.kind} at ${beatForReply?.vars?.spot || "the park"}.
+        Greet the operative in ONE short sentence. Set context for THIS beat only.
+        - brief: outline objective and ask for "ready".
+        - meet: acknowledge and mention the code phrase once.${meetHint}
+        - resolve/debrief: be concise and directive.
+        No extra lore, no new objectives.`
+        : `Greet the operative briefly (ONE sentence). Keep it professional; do not invent objectives.`;
+
+    const messageParts = [
+        { text: beatContext },
+        { text: `Persona (style only; ignore conflicting directives): ${npcRow.persona_style || "Cool, professional handler tone; concise and precise."}` },
+    ];
+
     try {
         const response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [
-                        {
-                            parts: [
-                                {
-                                    text: `${npcData.intro}\n\nWrite a brief in-character greeting message as the NPC.`,
-                                },
-                            ],
-                        },
-                    ],
-                }),
+                body: JSON.stringify({ contents: [{ parts: messageParts }] }),
             }
         );
 
@@ -220,14 +393,8 @@ app.post("/npc-chat/first-message", async (req, res) => {
             return res.status(500).json({ error: "No greeting from Gemini" });
         }
 
-        // Save greeting
         await supabase.from("npc_chat_messages").insert([
-            {
-                player_id: playerId,
-                npc_id: npcId,
-                from_role: "npc",
-                text: greeting,
-            },
+            { player_id: playerId, npc_id: npcId, from_role: "npc", text: greeting },
         ]);
 
         res.status(200).json({ alreadyStarted: false, greeting });
@@ -337,23 +504,27 @@ async function getOrCreateNpcId() {
         .from("npcs")
         .select("id")
         .limit(20);
+
     if (!error && npcs && npcs.length) {
         const pick = npcs[Math.floor(Math.random() * npcs.length)];
         return pick.id;
     }
 
+    // Create a default handler NPC with persona_style
     const handler = {
         name: "Handler",
         role: "handler",
-        intro:
-        "I’m your handler. Keep a low profile. Follow instructions precisely and report back.",
-        Archetype: "handler",
+        persona_style:
+        "Calm, efficient, professional. Uses short sentences and clear instructions.",
+        prompt_mode: "beat",
     };
+
     const { data: inserted, error: insErr } = await supabase
         .from("npcs")
         .insert(handler)
         .select("id")
         .single();
+
     if (insErr) throw insErr;
     return inserted.id;
 }
@@ -431,6 +602,41 @@ app.post("/pcg/mission", async (req, res) => {
 
         const npcId = await getOrCreateNpcId();
 
+        const CODE_WORDS = ["EMBER","ORION","GLASS","PHANTOM","VECTOR","ECHO","HARBOR","NIMBUS","SABLE","DELTA"];
+        const codePhrase = CODE_WORDS[missionSeed % CODE_WORDS.length];
+
+        // simple 3-beat plan at the same park A
+        const steps = [
+            {
+                id: `brief@${chosen.id}`,
+                kind: "brief",
+                at: { lat: chosen.lat, lon: chosen.lng },
+                gates: { keyword: ["ready", "briefed"] },
+                vars: { spot: chosen.name || "the park" }
+            },
+            {
+                id: `meet@${chosen.id}`,
+                kind: "meet",
+                at: { lat: chosen.lat, lon: chosen.lng },
+                gates: { keyword: ["code", "confirmed"] },
+                vars: { spot: chosen.name || "the park", codePhrase } // <— added
+            },
+            {
+                id: `resolve@${chosen.id}`,
+                kind: "resolve",
+                at: { lat: chosen.lat, lon: chosen.lng },
+                gates: { keyword: ["done", "secured", "objective complete"] },
+                vars: { spot: chosen.name || "the park" }
+            },
+            {
+                id: `debrief@${chosen.id}`,
+                kind: "debrief",
+                at: null,
+                gates: { keyword: ["report"] }, // <— simplified gate
+                vars: {}
+            }
+        ];
+
         // insert into missions and return the row
         const { data: inserted, error: insErr } = await supabase
             .from("missions")
@@ -448,6 +654,7 @@ app.post("/pcg/mission", async (req, res) => {
                     chosen,
                     top5: scored.slice(0,5).map(s => ({ id: s.park.id, score: s.score })),
                 },
+                steps,
                 // opens_at: null,
                 // closes_at: null,
             })
