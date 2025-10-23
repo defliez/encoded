@@ -26,7 +26,7 @@ function matchesKeywordGate(text, beat) {
 }
 
 app.post("/npc-chat", async (req, res) => {
-    const { playerId, npcId, playerMessage } = req.body;
+    const { playerId, npcId, playerMessage, missionId: missionIdInBody } = req.body;
 
     if (!playerMessage) {
         return res.status(400).json({ error: "Missing playerMessage" });
@@ -43,29 +43,14 @@ app.post("/npc-chat", async (req, res) => {
         return res.status(500).json({ error: "Failed to fetch NPC persona" });
     }
 
-
-    const { data: history, error: historyError } = await supabase
-        .from("npc_chat_messages")
-        .select("from_role, text")
-        .eq("player_id", playerId)
-        .eq("npc_id", npcId)
-        .order("created_at", { ascending: true })
-        .limit(10);
-
-    if (historyError) {
-        console.error(historyError);
-        return res.status(500).json({ error: "Failed to fetch chat history" });
-    }
-
     // prefer missionId if provided
-    const missionId = req.body.missionId || null;
     let missionRow = null;
 
-    if (missionId) {
+    if (missionIdInBody) {
         const { data: m, error: mErr } = await supabase
             .from("missions")
             .select("id, steps, npc_id")
-            .eq("id", missionId)
+            .eq("id", missionIdInBody)
             .single();
         if (mErr || !m) {
             return res.status(409).json({ error: "mission_not_found" });
@@ -86,6 +71,25 @@ app.post("/npc-chat", async (req, res) => {
             return res.status(409).json({ error: "no_mission_for_npc" });
         }
         missionRow = m;
+    }
+
+    const histQuery = supabase
+        .from("npc_chat_messages")
+        .select("from_role, text")
+        .eq("player_id", playerId)
+        .eq("npc_id", npcId)
+        .order("created_at", { ascending: true })
+        .limit(10);
+
+    if (missionRow?.id) {
+        histQuery.eq("mission_id", missionRow.id);
+    }
+
+    const { data: history, error: historyError } = await histQuery;
+
+    if (historyError) {
+        console.error(historyError);
+        return res.status(500).json({ error: "Failed to fetch chat history" });
     }
 
     let stepIdx = 0;
@@ -109,22 +113,14 @@ app.post("/npc-chat", async (req, res) => {
 
     // Save player's message first
     await supabase.from("npc_chat_messages").insert([
-        { player_id: playerId, npc_id: npcId, from_role: "player", text: playerMessage },
+        { player_id: playerId, npc_id: npcId, mission_id: missionRow.id, from_role: "player", text: playerMessage },
     ]);
 
     // Try to advance the beat
     let advanced = false;
     let justCompleted = false;
 
-    console.log("OUTSIDE 120 IF");
-    console.log("activeBeat:", activeBeat);
-    console.log('playerMessage:', playerMessage);
-    console.log('missionRow?.id:', missionRow?.id);
     if (activeBeat && matchesKeywordGate(playerMessage, activeBeat) && missionRow?.id) {
-        console.log("INSIDE 120 IF");
-        console.log("activeBeat:", activeBeat);
-        console.log('playerMessage:', playerMessage);
-        console.log('missionRow?.id:', missionRow?.id);
         const next = stepIdx + 1;
         await supabase
             .from("mission_participation")
@@ -209,60 +205,11 @@ app.post("/npc-chat", async (req, res) => {
             {
                 player_id: playerId,
                 npc_id: npcId,
+                mission_id: missionRow.id,
                 from_role: "npc",
                 text: reply,
             },
         ]);
-
-        // Check for win phrases
-        // const winPhrases = {
-            //     "Agent Cipher": "CIPHER CONFIRMS",
-            //     "Agent Calculator": "CALCULATOR PROTOCOL COMPLETE",
-            //     "Agent Noodle": "NOODLE NETWORK ACTIVATED",
-            //     "Agent Mastermind": "MASTERMIND PROTOCOL INITIATED",
-            // };
-        //
-            // const npcNameRes = await supabase
-        //     .from("npcs")
-        //     .select("name")
-        //     .eq("id", npcId)
-        //     .single();
-        //
-            // const npcName = npcNameRes?.data?.name;
-        // const winTrigger = winPhrases[npcName];
-        //
-            // if (winTrigger && reply.includes(winTrigger)) {
-                //     // Get the mission ID linked to this NPC
-                //     const { data: mission, error: missionError } = await supabase
-                //         .from("missions")
-                //         .select("id")
-                //         .eq("npc_id", npcId)
-                //         .single();
-                //
-                    //     if (missionError || !mission) {
-                        //         console.error("Failed to find mission:", missionError);
-                        //     } else {
-                            //         // Find player’s mission participation
-                            //         const { data: participation, error: participationError } = await supabase
-                            //             .from("mission_participation")
-                            //             .select("id")
-                            //             .eq("player_id", playerId)
-                            //             .eq("mission_id", mission.id)
-                            //             .is("completed_at", null)
-                            //             .single();
-                            //
-                                //         if (participationError || !participation) {
-                                    //             console.error("No participation found:", participationError);
-                                    //         } else {
-                                        //             // Mark mission complete
-                                        //             const now = new Date().toISOString();
-                                        //             await supabase
-                                        //                 .from("mission_participation")
-                                        //                 .update({ completed_at: now, status: "completed" })
-                                        //                 .eq("id", participation.id);
-                                        //         }
-                            //     }
-                // }
 
         res.json({ reply });
 
@@ -394,7 +341,7 @@ app.post("/npc-chat/first-message", async (req, res) => {
         }
 
         await supabase.from("npc_chat_messages").insert([
-            { player_id: playerId, npc_id: npcId, from_role: "npc", text: greeting },
+            { player_id: playerId, npc_id: npcId, mission_id: missionRow?.id ?? null, from_role: "npc", text: greeting },
         ]);
 
         res.status(200).json({ alreadyStarted: false, greeting });
@@ -406,19 +353,25 @@ app.post("/npc-chat/first-message", async (req, res) => {
 
 
 app.get("/npc-chat/history", async (req, res) => {
-    const { playerId, npcId } = req.query;
+    const { playerId, npcId, missionId } = req.query;
 
     if (!playerId || !npcId) {
         return res.status(400).json({ error: "Missing playerId or npcId" });
     }
 
     try {
-        const { data, error } = await supabase
+        const q = supabase
             .from("npc_chat_messages")
             .select("from_role, text, created_at")
             .eq("player_id", playerId)
             .eq("npc_id", npcId)
             .order("created_at", { ascending: true });
+
+        if (missionId) {
+            q.eq("mission_id", missionId);
+        }
+
+        const { data, error } = await q;
 
         if (error) {
             console.error(error);
