@@ -4,6 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { supabase } from "./supabaseClient.js";
 import pcgRouter from "./pcg.js";
+import { fetchNamedLandmarksNear } from "./pcg.js";
 
 dotenv.config();
 
@@ -23,6 +24,40 @@ function matchesKeywordGate(text, beat) {
     const kws = beat?.gates?.keyword || [];
     const low = (text || "").toLowerCase();
     return kws.some(k => low.includes(k.toLowerCase()));
+}
+
+function normalizeStr(s = "") {
+    return s
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/["'’`´.,:;!?()/\-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+}
+
+function includesAllTokens(text, phrase) {
+    const t = normalizeStr(text);
+    const tokens = normalizeStr(phrase).split(" ");
+    return tokens.every(tok => t.includes(tok));
+}
+
+function matchesGate(text, beat) {
+    if (!text || !beat?.gates) return false;
+
+    // landmark gate
+    if (beat.gates.landmark?.name) {
+        const targetName = beat.gates.landmark.name;
+        if (includesAllTokens(text, targetName)) return true;
+    }
+
+    // fallback keyword gate
+    const kws = beat.gates.keyword || [];
+    const low = normalizeStr(text);
+    if (kws.length) {
+        return kws.some(k => low.includes(normalizeStr(k)));
+    }
+    return false;
 }
 
 app.post("/npc-chat", async (req, res) => {
@@ -120,7 +155,7 @@ app.post("/npc-chat", async (req, res) => {
     let advanced = false;
     let justCompleted = false;
 
-    if (activeBeat && matchesKeywordGate(playerMessage, activeBeat) && missionRow?.id) {
+    if (activeBeat && matchesGate(playerMessage, activeBeat) && missionRow?.id) {
         const next = stepIdx + 1;
         await supabase
             .from("mission_participation")
@@ -163,11 +198,11 @@ app.post("/npc-chat", async (req, res) => {
         : beatForReply
         ? `Current beat: ${beatForReply.kind} at ${beatForReply?.vars?.spot || "the park"}.
         Your role in THIS beat only (do not invent new beats/endings):
-        - brief: explain/confirm the objective; wait for the gate keyword.
-        - meet: acknowledge readiness; share/confirm the code phrase once.${meetHint}
+        - brief: instruct the operative to find a named landmark or plaque nearby and reply with its EXACT name. Provide only a short hint if available.
+        - meet: if they reply with the correct landmark name, confirm and proceed. Never reveal the name yourself.
         - resolve: confirm the cache is secured; give final instruction.
         - debrief: acknowledge 'report' and sign off.
-        Be concise (≤2 sentences).`
+        Keep it concise (≤2 sentences).`
         : `No active beat; be brief and in-character.`;
 
     // Build prompt parts (use beatContext first, persona after)
@@ -555,6 +590,20 @@ app.post("/pcg/mission", async (req, res) => {
 
         const npcId = await getOrCreateNpcId();
 
+        // --- find named landmark near chosen park ---
+        const landmarks = await fetchNamedLandmarksNear(chosen.lat, chosen.lng, 140);
+        const target = landmarks?.[0] || null;
+
+        let hint = "";
+        if (target) {
+            if (target.type === "plaque") hint = "Find the metal plaque nearby.";
+            else if (target.type === "memorial" || target.type === "monument") hint = "Look for the memorial stone in the square.";
+            else if (target.type === "artwork" || target.type === "sculpture") hint = "Find the sculpture on the plaza.";
+            else if (target.type === "info_board") hint = "Check the information board.";
+            else if (target.type === "cafe") hint = "Find a named café on the square.";
+            else hint = "Search for a landmark with a nameplate.";
+        }
+
         const CODE_WORDS = ["EMBER","ORION","GLASS","PHANTOM","VECTOR","ECHO","HARBOR","NIMBUS","SABLE","DELTA"];
         const codePhrase = CODE_WORDS[missionSeed % CODE_WORDS.length];
 
@@ -565,14 +614,24 @@ app.post("/pcg/mission", async (req, res) => {
                 kind: "brief",
                 at: { lat: chosen.lat, lon: chosen.lng },
                 gates: { keyword: ["ready", "briefed"] },
-                vars: { spot: chosen.name || "the park" }
+                vars: {
+                    spot: chosen.name || "the park",
+                    landmarkHint: target ? hint : "uh oh ur on ur own >:^)",
+                    target: target ? { name: target.name, type: target.type, id: target.id } : null
+                }
             },
             {
                 id: `meet@${chosen.id}`,
                 kind: "meet",
                 at: { lat: chosen.lat, lon: chosen.lng },
-                gates: { keyword: ["code", "confirmed"] },
-                vars: { spot: chosen.name || "the park", codePhrase } // <— added
+                gates: target
+                    ? { landmark: { name: target.name } }
+                    : { keyword: ["code", "confirmed"] },
+                vars: {
+                    spot: chosen.name || "the park",
+                    codePhrase: target ? null : codePhrase,
+                    target: target ? { name: target.name, type: target.type, id: target.id } : null
+                }
             },
             {
                 id: `resolve@${chosen.id}`,

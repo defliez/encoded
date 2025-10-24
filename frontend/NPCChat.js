@@ -40,6 +40,7 @@ export default function NPCChat({ route }) {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         npcId,
+                        missionId,
                         playerId: authUser.id,
                     }),
                 });
@@ -106,6 +107,7 @@ export default function NPCChat({ route }) {
                 },
                 body: JSON.stringify({
                     npcId,
+                    missionId,
                     playerId: authUser.id,
                     playerMessage, // <-- make sure this line exists and is not empty
                 }),

@@ -46,6 +46,88 @@ async function fetchOverpass(query) {
     throw lastErr || new Error("All mirrors failed");
 }
 
+export async function fetchNamedLandmarksNear(lat, lng, radius = 120) {
+    const q = `
+    [out:json][timeout:45];
+    (
+        node(around:${radius},${lat},${lng})[tourism=artwork];
+        way(around:${radius},${lat},${lng})[tourism=artwork];
+        relation(around:${radius},${lat},${lng})[tourism=artwork];
+
+        node(around:${radius},${lat},${lng})[historic=memorial];
+        way(around:${radius},${lat},${lng})[historic=memorial];
+        relation(around:${radius},${lat},${lng})[historic=memorial];
+
+        node(around:${radius},${lat},${lng})[memorial=plaque];
+        way(around:${radius},${lat},${lng})[memorial=plaque];
+        relation(around:${radius},${lat},${lng})[memorial=plaque];
+
+        node(around:${radius},${lat},${lng})[artwork_type=sculpture];
+        way(around:${radius},${lat},${lng})[artwork_type=sculpture];
+        relation(around:${radius},${lat},${lng})[artwork_type=sculpture];
+
+        node(around:${radius},${lat},${lng})[information=board];
+        way(around:${radius},${lat},${lng})[information=board];
+        relation(around:${radius},${lat},${lng})[information=board];
+
+        node(around:${radius},${lat},${lng})[tourism=attraction];
+        way(around:${radius},${lat},${lng})[tourism=attraction];
+        relation(around:${radius},${lat},${lng})[tourism=attraction];
+
+        node(around:${radius},${lat},${lng})[amenity=cafe];
+        way(around:${radius},${lat},${lng})[amenity=cafe];
+        relation(around:${radius},${lat},${lng})[amenity=cafe];
+    );
+    out tags center;
+    `;
+
+    const raw = await fetchOverpass(q);
+    const gj = osmtogeojson(raw);
+
+    const items = [];
+    for (const f of gj.features) {
+        const props = f.properties || {};
+        const tags = props.tags || props;
+        const name = tags.name;
+        if (!name) continue;
+
+        const c = f.geometry.type === "Point" ? f : centroid(f);
+        const [lon, lat0] = c.geometry.coordinates;
+
+        let type =
+            tags.tourism === "artwork" ? "artwork" :
+            tags.historic === "memorial" ? "memorial" :
+            tags.memorial === "plaque" ? "plaque" :
+            tags.artwork_type === "sculpture" ? "sculpture" :
+            tags.information === "board" ? "info_board" :
+            tags.amenity === "cafe" ? "cafe" : "other";
+
+        items.push({
+            id: props["@id"] || `${props.type}/${props.id}`,
+            type,
+            name,
+            lat: lat0,
+            lon,
+            tags
+        });
+    }
+
+    // prioritize art/memorial/plaque types
+    const score = i => {
+        const pri =
+            i.type === "plaque" ? 5 :
+            i.type === "memorial" ? 5 :
+            i.type === "artwork" ? 5 :
+            i.type === "sculpture" ? 4 :
+            i.type === "info_board" ? 3 :
+            i.type === "cafe" ? 2 : 1;
+        const lenPenalty = Math.max(0, i.name.length - 24) / 24;
+        return pri - lenPenalty;
+    };
+
+    return items.sort((a,b) => score(b) - score(a));
+}
+
 router.get('/pois', async (req, res) => {
     try {
         const lat = parseFloat(req.query.lat);
