@@ -1,7 +1,7 @@
 // MapScreen.js
 import SPY_MAP_STYLE from './SpyMapStyle';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator, Image, Pressable, Text } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,9 +13,8 @@ import blueEye from './assets/view.png';
 import redEye from './assets/technology.png';
 import blackEye from './assets/focus.png';
 
-
-//temp for testing
-const BACKEND_BASE = 'http://192.168.0.229:3000';
+// temp for testing
+const BACKEND_BASE = 'http://192.168.0.127:3000';
 
 function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
@@ -39,6 +38,10 @@ export default function MapScreen({ navigation }) {
 
     const [pois, setPois] = useState([]);
     const [loadingPois, setLoadingPois] = useState(false);
+
+    // radar scanning UI state
+    const [scanning, setScanning] = useState(false);
+    const [scanRadius, setScanRadius] = useState(0);
 
     const { authUser, loading: userLoading } = useUser();
 
@@ -96,8 +99,6 @@ export default function MapScreen({ navigation }) {
                         setLoadingPois(true);
                         try {
                             const { latitude, longitude } = loc.coords;
-                            // const latitude = 55.6050;
-                            // const longitude = 13.0038;
                             const url = `${BACKEND_BASE}/pcg/pois?lat=${latitude}&lng=${longitude}&radius=1200`;
                             const resp = await fetch(url);
                             if (!resp.ok) throw new Error(`POI fetch failed: ${resp.status}`);
@@ -118,17 +119,45 @@ export default function MapScreen({ navigation }) {
 
             fetchLocationAndMissions();
 
-            return () => { isActive = false; };
+            return () => {
+                isActive = false;
+            };
         }, [authUser?.id])
     );
 
-    async function generateMission() {
+    // ------- radar scan logic: animate a sweep then generate a mission -------
+    useEffect(() => {
+        if (!scanning) return;
+        setScanRadius(0);
+
+        const steps = 20; // number of increments during the sweep
+        const durationMs = 1600; // total sweep duration
+        const stepMs = Math.floor(durationMs / steps);
+        const increment = ACCEPT_DISTANCE_METERS / steps;
+
+        let r = 0;
+        const id = setInterval(async () => {
+            r += increment;
+            setScanRadius(r);
+
+            if (r >= ACCEPT_DISTANCE_METERS) {
+                clearInterval(id);
+                await generateMissionWithinScan(); // call backend after sweep finishes
+                setScanning(false);
+            }
+        }, stepMs);
+
+        return () => clearInterval(id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [scanning]);
+
+    async function generateMissionWithinScan() {
         try {
             if (!location?.coords) return;
             const body = {
                 lat: location.coords.latitude,
                 lng: location.coords.longitude,
-                radius: 1000,
+                radius: ACCEPT_DISTANCE_METERS, // generate within the radar circle
             };
             const resp = await fetch(`${BACKEND_BASE}/pcg/mission`, {
                 method: 'POST',
@@ -151,98 +180,109 @@ export default function MapScreen({ navigation }) {
         }
     }
 
+    function startScan() {
+        if (scanning) return;
+        setScanning(true);
+    }
+
     if (!authUser || !location || userLoading || loading) {
         return <ActivityIndicator style={{ flex: 1 }} size="large" color="black" />;
     }
 
     return (
         <View style={styles.container}>
-        <MapView
-        style={styles.map}
-        provider="google"
-        customMapStyle={SPY_MAP_STYLE}
-        initialRegion={{
-            latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-        }}
-        showsUserLocation={true}
-        >
-        <Circle
-        center={{
-            latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-        }}
-        radius={ACCEPT_DISTANCE_METERS}
-        strokeColor="rgba(0,0,0,0.3)"
-        fillColor="rgba(0,255,0,0.1)"
-        />
-
-        {/* --- PCG: show POIs (green pins) for sanity check --- */}
-        {pois.map((p) => (
-            <Marker
-            key={`poi-${p.id}`}
-            coordinate={{ latitude: p.lat, longitude: p.lng }}
-            title={p.name || p.category}
-            pinColor="green"
-            />
-        ))}
-
-        {missions.map((mission) => {
-            const distance = getDistanceFromLatLonInMeters(
-                location.coords.latitude,
-                location.coords.longitude,
-                mission.lat,
-                mission.lon
-            );
-
-            const withinRange = distance <= ACCEPT_DISTANCE_METERS;
-            const isAccepted = !!acceptedMissions[mission.id];
-
-            const markerIcon = isAccepted
-                ? blackEye
-                : withinRange
-                ? blueEye
-                : redEye;
-
-            return (
-                <Marker
-                key={mission.id}
-                coordinate={{ latitude: mission.lat, longitude: mission.lon }}
-                title={mission.title}
-                description={
-                    isAccepted
-                    ? mission.description
-                    : withinRange
-                    ? mission.description
-                    : `Too far away (${Math.round(distance)}m)`
-                }
-                onPress={() => {
-                    if (withinRange || isAccepted) {
-                        navigation.navigate('MissionDetails', {
-                            mission,
-                            playerId: authUser.id,
-                        });
-                    }
+            <MapView
+                style={styles.map}
+                provider="google"
+                customMapStyle={SPY_MAP_STYLE}
+                initialRegion={{
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                    latitudeDelta: 0.01,
+                    longitudeDelta: 0.01,
                 }}
-                >
-                <Image
-                source={markerIcon}
-                style={{ width: 32, height: 32, resizeMode: 'contain' }}
+                showsUserLocation={true}
+            >
+                {/* Player scan radius (static) */}
+                <Circle
+                    center={{
+                        latitude: location.coords.latitude,
+                        longitude: location.coords.longitude,
+                    }}
+                    radius={ACCEPT_DISTANCE_METERS}
+                    strokeColor="rgba(0,0,0,0.3)"
+                    fillColor="rgba(0,255,0,0.1)"
                 />
-                </Marker>
-            );
-        })}
-        </MapView>
-        {loadingPois && (
-            <ActivityIndicator style={{ position:'absolute', top: 16, right: 16 }} />
-        )}
 
-        {/* --- floating dev button --- */}
-        <Pressable onPress={generateMission} style={styles.fab}>
-            <Text style={styles.fabText}>Generate mission</Text>
-        </Pressable>
+                {/* Radar sweep visualization during scanning */}
+                {scanning && (
+                    <Circle
+                        center={{
+                            latitude: location.coords.latitude,
+                            longitude: location.coords.longitude,
+                        }}
+                        radius={scanRadius}
+                        strokeColor="rgba(0,255,0,0.6)"
+                        fillColor="rgba(0,255,0,0.15)"
+                    />
+                )}
+
+                {/* --- PCG: show POIs (green pins) for sanity check --- */}
+                {pois.map((p) => (
+                    <Marker
+                        key={`poi-${p.id}`}
+                        coordinate={{ latitude: p.lat, longitude: p.lng }}
+                        title={p.name || p.category}
+                        pinColor="green"
+                    />
+                ))}
+
+                {missions.map((mission) => {
+                    const distance = getDistanceFromLatLonInMeters(
+                        location.coords.latitude,
+                        location.coords.longitude,
+                        mission.lat,
+                        mission.lon
+                    );
+
+                    const withinRange = distance <= ACCEPT_DISTANCE_METERS;
+                    const isAccepted = !!acceptedMissions[mission.id];
+
+                    const markerIcon = isAccepted ? blackEye : withinRange ? blueEye : redEye;
+
+                    return (
+                        <Marker
+                            key={mission.id}
+                            coordinate={{ latitude: mission.lat, longitude: mission.lon }}
+                            title={mission.title}
+                            description={
+                                isAccepted
+                                    ? mission.description
+                                    : withinRange
+                                        ? mission.description
+                                        : `Too far away (${Math.round(distance)}m)`
+                            }
+                            onPress={() => {
+                                if (withinRange || isAccepted) {
+                                    navigation.navigate('MissionDetails', {
+                                        mission,
+                                        playerId: authUser.id,
+                                    });
+                                }
+                            }}
+                        >
+                            <Image source={markerIcon} style={{ width: 32, height: 32, resizeMode: 'contain' }} />
+                        </Marker>
+                    );
+                })}
+            </MapView>
+
+            {loadingPois && <ActivityIndicator style={{ position: 'absolute', top: 16, right: 16 }} />}
+
+            {/* --- floating Scan button --- */}
+            <Pressable onPress={startScan} style={[styles.fab, scanning && styles.fabDisabled]} disabled={scanning}>
+                <Text style={styles.fabText}>{scanning ? 'Scanning…' : 'Scan'}</Text>
+            </Pressable>
         </View>
     );
 }
@@ -266,6 +306,9 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.4,
         shadowRadius: 6,
         shadowOffset: { width: 0, height: 3 },
+    },
+    fabDisabled: {
+        opacity: 0.6,
     },
     fabText: { color: '#000', fontWeight: '700' },
 });
