@@ -1,16 +1,23 @@
-// NPCChat.js
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import {
+    View,
+    Text,
+    TextInput,
+    Button,
+    StyleSheet,
+    FlatList,
+    KeyboardAvoidingView,
+    Platform,
+    ActivityIndicator,
+} from 'react-native';
 import { supabase } from './supabaseClient';
 import { useUser } from './UserContext';
 import TypewriterText from './components/TypewriterText';
 
-// const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-const BACKEND_URL = "http://192.168.0.229:3000";
-
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "http://192.168.0.127:3000";
 
 export default function NPCChat({ route }) {
-    const { npcId, missionId } = route.params;
+    const { npcId, missionId, missionTitle } = route.params;
     const [npc, setNpc] = useState(null);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -18,24 +25,21 @@ export default function NPCChat({ route }) {
     const [lastAnimatedId, setLastAnimatedId] = useState(null);
 
     const flatListRef = useRef(null);
-
     const { authUser } = useUser();
 
-    // Fetch NPC info
     useEffect(() => {
         if (!authUser) return;
-        const fetchNpc = async () => {
+
+        const fetchNpcAndHistory = async () => {
             try {
-                const { data, error } = await supabase
+                const { data: npcData } = await supabase
                     .from('npcs')
                     .select('*')
                     .eq('id', npcId)
                     .single();
+                setNpc(npcData);
 
-                if (error) console.error(error);
-                else setNpc(data);
-
-                const res = await fetch(`${BACKEND_URL}/npc-chat/first-message`, {
+                await fetch(`${BACKEND_URL}/npc-chat/first-message`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -45,10 +49,9 @@ export default function NPCChat({ route }) {
                     }),
                 });
 
-                const json = await res.json();
-
-                // Then fetch all history
-                const historyRes = await fetch(`${BACKEND_URL}/npc-chat/history?playerId=${authUser.id}&npcId=${npcId}&missionId=${missionId}`);
+                const historyRes = await fetch(
+                    `${BACKEND_URL}/npc-chat/history?playerId=${authUser.id}&npcId=${npcId}&missionId=${missionId}`
+                );
                 const historyJson = await historyRes.json();
 
                 if (historyJson.history) {
@@ -59,15 +62,13 @@ export default function NPCChat({ route }) {
                     }));
                     setMessages(formatted);
                 }
-
             } catch (err) {
                 console.error("Failed to fetch NPC or chat history", err);
             }
-
             setLoading(false);
         };
 
-        fetchNpc();
+        fetchNpcAndHistory();
     }, []);
 
     const sendMessage = async () => {
@@ -83,7 +84,6 @@ export default function NPCChat({ route }) {
         setInput('');
 
         const npcReplyText = await getGeminiReply(userMessage.text);
-        // const npcReplyText = await getGeminiReply([...messages, userMessage]);
 
         const npcReply = {
             id: Date.now().toString() + "-npc",
@@ -102,20 +102,16 @@ export default function NPCChat({ route }) {
         try {
             const res = await fetch(`${BACKEND_URL}/npc-chat`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     npcId,
                     missionId,
                     playerId: authUser.id,
-                    playerMessage, // <-- make sure this line exists and is not empty
+                    playerMessage,
                 }),
             });
 
             const data = await res.json();
-            console.log("data", data);
-            console.log("data.reply", data.reply);
             return data.reply || "...";
         } catch (err) {
             console.error("Gemini API error:", err);
@@ -131,7 +127,10 @@ export default function NPCChat({ route }) {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             keyboardVerticalOffset={80}
         >
-            <Text style={styles.header}>{npc?.name}</Text>
+            <View style={styles.headerContainer}>
+                <Text style={styles.missionTitle}>{missionTitle}</Text>
+                <Text style={styles.npcName}>Handler: {npc?.name || "..."}</Text>
+            </View>
 
             <FlatList
                 ref={flatListRef}
@@ -141,21 +140,24 @@ export default function NPCChat({ route }) {
                     const isAnimating = item.from === 'npc' && item.id === lastAnimatedId;
                     return (
                         <View
-                            style={[styles.bubble, item.from === 'npc' ? styles.npcBubble : styles.playerBubble]}>
-                            {item.from === 'npc' && isAnimating
-                                ? (
-                                    <TypewriterText
-                                        content={item.text}
-                                        speed={30}
-                                        style={styles.bubbleText}
-                                        onTypingComplete={() => {
-                                            setLastAnimatedId(null);
-                                            flatListRef.current?.scrollToEnd({ animated: true });
-                                        }}
-                                    />
-                                )
-                                : <Text style={styles.bubbleText}>{item.text}</Text>
-                            }
+                            style={[
+                                styles.bubble,
+                                item.from === 'npc' ? styles.npcBubble : styles.playerBubble,
+                            ]}
+                        >
+                            {item.from === 'npc' && isAnimating ? (
+                                <TypewriterText
+                                    content={item.text}
+                                    speed={30}
+                                    style={styles.bubbleText}
+                                    onTypingComplete={() => {
+                                        setLastAnimatedId(null);
+                                        flatListRef.current?.scrollToEnd({ animated: true });
+                                    }}
+                                />
+                            ) : (
+                                <Text style={styles.bubbleText}>{item.text}</Text>
+                            )}
                         </View>
                     );
                 }}
@@ -181,13 +183,31 @@ export default function NPCChat({ route }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#111',
+        backgroundColor: '#0b0b0b',
     },
-    header: {
-        fontSize: 20,
+    headerContainer: {
+        paddingTop: 48,
+        paddingBottom: 12,
+        paddingHorizontal: 16,
+        borderBottomWidth: 1,
+        borderColor: '#222',
+        backgroundColor: '#000',
+        shadowColor: '#000',
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        shadowOffset: { height: 2, width: 0 },
+        elevation: 3,
+    },
+    missionTitle: {
+        fontSize: 18,
         fontWeight: 'bold',
         color: '#fff',
-        padding: 16,
+        letterSpacing: 0.5,
+    },
+    npcName: {
+        fontSize: 14,
+        color: '#999',
+        marginTop: 2,
     },
     inputRow: {
         flexDirection: 'row',
@@ -198,7 +218,7 @@ const styles = StyleSheet.create({
     },
     input: {
         flex: 1,
-        backgroundColor: '#222',
+        backgroundColor: '#1a1a1a',
         color: '#fff',
         borderRadius: 8,
         paddingHorizontal: 12,
@@ -220,6 +240,7 @@ const styles = StyleSheet.create({
     },
     bubbleText: {
         color: '#fff',
+        fontSize: 15,
+        lineHeight: 20,
     },
 });
-

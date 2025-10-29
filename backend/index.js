@@ -516,20 +516,28 @@ async function getOrCreateNpcId() {
     if (insErr) throw insErr;
     return inserted.id;
 }
-
-// simple title/description templates
 function makeCodename(seed) {
     const words = ["EMBER", "ORION", "GLASS", "PHANTOM", "VECTOR", "ECHO", "HARBOR", "NIMBUS"];
-    const n = seed % words.length;
+    const n = Math.abs(seed) % words.length;
     return words[n];
 }
+
 function makeMissionText(park, seed) {
     const code = makeCodename(seed);
-    const title = `Operation ${code}`;
-    const spot = park.name ? `at **${park.name}**` : "near the marked park";
+    const baseName = park.name?.trim() || "Unknown Area";
+
+    const cleanName = baseName.replace(/\b(Park|Square|Garden|Plaza|the)\b/gi, "").trim();
+
+    const title = park.name
+        ? `Operation ${code} – ${cleanName}`
+        : `Operation ${code}`;
+
+    const spot = park.name ? `at **${park.name}**` : "near your location";
+
     const description =
-        `Briefing: Meet your handler ${spot}. Retrieve the cache, decode the strip, ` +
-        `and await further instructions. Keep it discreet.`;
+        `Briefing: Meet your handler ${spot}. Secure the drop point, verify credentials, ` +
+        `and await further instructions. Maintain a low profile.`;
+
     return { title, description };
 }
 
