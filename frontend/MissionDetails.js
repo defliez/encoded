@@ -39,7 +39,7 @@ export default function MissionDetails({ route, navigation }) {
         } else {
             // Alert.alert('Mission Started!', `You started: ${mission.title}`);
             // navigation.goBack();
-            navigation.navigate('NPCChat', { npcId: mission.npc_id });
+            navigation.navigate('NPCChat', { npcId: mission.npc_id, missionId: mission.id });
         }
     };
 

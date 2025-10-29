@@ -5,10 +5,12 @@ import { supabase } from './supabaseClient';
 import { useUser } from './UserContext';
 import TypewriterText from './components/TypewriterText';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+// const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BACKEND_URL = "http://192.168.0.229:3000";
+
 
 export default function NPCChat({ route }) {
-    const { npcId } = route.params;
+    const { npcId, missionId } = route.params;
     const [npc, setNpc] = useState(null);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -38,6 +40,7 @@ export default function NPCChat({ route }) {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         npcId,
+                        missionId,
                         playerId: authUser.id,
                     }),
                 });
@@ -45,7 +48,7 @@ export default function NPCChat({ route }) {
                 const json = await res.json();
 
                 // Then fetch all history
-                const historyRes = await fetch(`${BACKEND_URL}/npc-chat/history?playerId=${authUser.id}&npcId=${npcId}`);
+                const historyRes = await fetch(`${BACKEND_URL}/npc-chat/history?playerId=${authUser.id}&npcId=${npcId}&missionId=${missionId}`);
                 const historyJson = await historyRes.json();
 
                 if (historyJson.history) {
@@ -104,6 +107,7 @@ export default function NPCChat({ route }) {
                 },
                 body: JSON.stringify({
                     npcId,
+                    missionId,
                     playerId: authUser.id,
                     playerMessage, // <-- make sure this line exists and is not empty
                 }),

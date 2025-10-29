@@ -2,17 +2,20 @@
 import SPY_MAP_STYLE from './SpyMapStyle';
 
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Image, Pressable, Text } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { supabase } from './supabaseClient';
 import { useUser } from './UserContext';
 
-
 import blueEye from './assets/view.png';
 import redEye from './assets/technology.png';
 import blackEye from './assets/focus.png';
+
+
+//temp for testing
+const BACKEND_BASE = 'http://192.168.0.229:3000';
 
 function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
@@ -34,9 +37,12 @@ export default function MapScreen({ navigation }) {
     const [acceptedMissions, setAcceptedMissions] = useState({});
     const [loading, setLoading] = useState(true);
 
+    const [pois, setPois] = useState([]);
+    const [loadingPois, setLoadingPois] = useState(false);
+
     const { authUser, loading: userLoading } = useUser();
 
-    const ACCEPT_DISTANCE_METERS = 100;
+    const ACCEPT_DISTANCE_METERS = 1000;
 
     useFocusEffect(
         useCallback(() => {
@@ -84,6 +90,25 @@ export default function MapScreen({ navigation }) {
                         setMissions(filtered);
                         setAcceptedMissions(participationMap);
                     }
+
+                    // --- fetch OSM POIs for pcg testing ---
+                    if (isActive && loc?.coords) {
+                        setLoadingPois(true);
+                        try {
+                            const { latitude, longitude } = loc.coords;
+                            // const latitude = 55.6050;
+                            // const longitude = 13.0038;
+                            const url = `${BACKEND_BASE}/pcg/pois?lat=${latitude}&lng=${longitude}&radius=1200`;
+                            const resp = await fetch(url);
+                            if (!resp.ok) throw new Error(`POI fetch failed: ${resp.status}`);
+                            const json = await resp.json();
+                            if (isActive) setPois(json.pois || []);
+                        } catch (e) {
+                            console.warn('POI fetch error:', e);
+                        } finally {
+                            if (isActive) setLoadingPois(false);
+                        }
+                    }
                 } catch (err) {
                     console.error('Error fetching map data:', err);
                 } finally {
@@ -93,11 +118,38 @@ export default function MapScreen({ navigation }) {
 
             fetchLocationAndMissions();
 
-            return () => {
-                isActive = false;
-            };
-        }, [])
+            return () => { isActive = false; };
+        }, [authUser?.id])
     );
+
+    async function generateMission() {
+        try {
+            if (!location?.coords) return;
+            const body = {
+                lat: location.coords.latitude,
+                lng: location.coords.longitude,
+                radius: 1000,
+            };
+            const resp = await fetch(`${BACKEND_BASE}/pcg/mission`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const json = await resp.json();
+            if (!resp.ok) {
+                console.warn('Generate mission failed:', json);
+                return;
+            }
+
+            // add newly created mission locally so it appears immediately
+            setMissions((prev) => {
+                const exists = prev.some((m) => m.id === json.mission.id);
+                return exists ? prev : [...prev, json.mission];
+            });
+        } catch (e) {
+            console.warn('generateMission error', e);
+        }
+    }
 
     if (!authUser || !location || userLoading || loading) {
         return <ActivityIndicator style={{ flex: 1 }} size="large" color="black" />;
@@ -105,74 +157,92 @@ export default function MapScreen({ navigation }) {
 
     return (
         <View style={styles.container}>
-            <MapView
-                style={styles.map}
-                provider="google"
-                customMapStyle={SPY_MAP_STYLE}
-                initialRegion={{
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                    latitudeDelta: 0.01,
-                    longitudeDelta: 0.01,
+        <MapView
+        style={styles.map}
+        provider="google"
+        customMapStyle={SPY_MAP_STYLE}
+        initialRegion={{
+            latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+        }}
+        showsUserLocation={true}
+        >
+        <Circle
+        center={{
+            latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+        }}
+        radius={ACCEPT_DISTANCE_METERS}
+        strokeColor="rgba(0,0,0,0.3)"
+        fillColor="rgba(0,255,0,0.1)"
+        />
+
+        {/* --- PCG: show POIs (green pins) for sanity check --- */}
+        {pois.map((p) => (
+            <Marker
+            key={`poi-${p.id}`}
+            coordinate={{ latitude: p.lat, longitude: p.lng }}
+            title={p.name || p.category}
+            pinColor="green"
+            />
+        ))}
+
+        {missions.map((mission) => {
+            const distance = getDistanceFromLatLonInMeters(
+                location.coords.latitude,
+                location.coords.longitude,
+                mission.lat,
+                mission.lon
+            );
+
+            const withinRange = distance <= ACCEPT_DISTANCE_METERS;
+            const isAccepted = !!acceptedMissions[mission.id];
+
+            const markerIcon = isAccepted
+                ? blackEye
+                : withinRange
+                ? blueEye
+                : redEye;
+
+            return (
+                <Marker
+                key={mission.id}
+                coordinate={{ latitude: mission.lat, longitude: mission.lon }}
+                title={mission.title}
+                description={
+                    isAccepted
+                    ? mission.description
+                    : withinRange
+                    ? mission.description
+                    : `Too far away (${Math.round(distance)}m)`
+                }
+                onPress={() => {
+                    if (withinRange || isAccepted) {
+                        navigation.navigate('MissionDetails', {
+                            mission,
+                            playerId: authUser.id,
+                        });
+                    }
                 }}
-                showsUserLocation={true}
-            >
-                <Circle
-                    center={{
-                        latitude: location.coords.latitude,
-                        longitude: location.coords.longitude,
-                    }}
-                    radius={ACCEPT_DISTANCE_METERS}
-                    strokeColor="rgba(0,0,0,0.3)"
-                    fillColor="rgba(0,255,0,0.1)"
+                >
+                <Image
+                source={markerIcon}
+                style={{ width: 32, height: 32, resizeMode: 'contain' }}
                 />
+                </Marker>
+            );
+        })}
+        </MapView>
+        {loadingPois && (
+            <ActivityIndicator style={{ position:'absolute', top: 16, right: 16 }} />
+        )}
 
-                {missions.map((mission) => {
-                    const distance = getDistanceFromLatLonInMeters(
-                        location.coords.latitude,
-                        location.coords.longitude,
-                        mission.lat,
-                        mission.lon
-                    );
-
-                    const withinRange = distance <= ACCEPT_DISTANCE_METERS;
-                    const isAccepted = !!acceptedMissions[mission.id];
-
-                    const markerIcon = isAccepted
-                        ? blackEye
-                        : withinRange
-                            ? blueEye
-                            : redEye;
-
-                    return (
-                        <Marker
-                            key={mission.id}
-                            coordinate={{ latitude: mission.lat, longitude: mission.lon }}
-                            title={mission.title}
-                            description={
-                                isAccepted
-                                    ? mission.description
-                                    : withinRange
-                                        ? mission.description
-                                        : `Too far away (${Math.round(distance)}m)`
-                            }
-                            onPress={() => {
-                                if (withinRange || isAccepted) {
-                                    navigation.navigate('MissionDetails', {
-                                        mission,
-                                        playerId: authUser.id,
-                                    });
-                                }
-                            }}
-                        >
-                            <Image
-                                source={markerIcon}
-                                style={{ width: 32, height: 32, resizeMode: 'contain' }}
-                            />
-                        </Marker>
-                    );
-                })}
-            </MapView>
+        {/* --- floating dev button --- */}
+        <Pressable onPress={generateMission} style={styles.fab}>
+            <Text style={styles.fabText}>Generate mission</Text>
+        </Pressable>
         </View>
     );
 }
@@ -184,4 +254,18 @@ const styles = StyleSheet.create({
     map: {
         flex: 1,
     },
+    fab: {
+        position: 'absolute',
+        right: 24,
+        bottom: 24,
+        backgroundColor: '#8bc34a',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderRadius: 10,
+        shadowColor: '#000',
+        shadowOpacity: 0.4,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 3 },
+    },
+    fabText: { color: '#000', fontWeight: '700' },
 });
