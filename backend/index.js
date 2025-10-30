@@ -6,7 +6,14 @@ import { supabase } from "./supabaseClient.js";
 import pcgRouter from "./pcg.js";
 import { fetchNamedLandmarksNear } from "./pcg.js";
 
+import { planMission } from "./pcg/planner.js";
+import { fakeEnvFromPosition } from "./pcg/world.js";
+
+
 dotenv.config();
+
+// const USE_PLANNER = process.env.USE_PLANNER !== "false"; // default ON
+const USE_PLANNER = true;
 
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -562,6 +569,47 @@ async function isDuplicateMission(park) {
     return false;
 }
 
+function gatesForBeatInstance(beat) {
+    // Map planner kinds to your existing gate style
+    // Prefer landmark name gates when available, else fallback to keywords
+    if (beat.kind === "brief") {
+        return { keyword: ["ready", "briefed"] };
+    }
+    if (beat.kind === "travel") {
+        // Arrived confirmations
+        return { keyword: ["arrived", "here", "at target"] };
+    }
+    if (beat.kind === "recon") {
+        return { keyword: ["found", "clue", "marker", "saw"] };
+    }
+    if (beat.kind === "puzzle") {
+        return { keyword: ["decoded", "answer", "solved"] };
+    }
+    if (beat.kind === "handoff") {
+        const name = beat?.vars?.drop?.name;
+        return name ? { landmark: { name } } : { keyword: ["package", "dead drop", "cache"] };
+    }
+    if (beat.kind === "resolve") {
+        return { keyword: ["done", "secured", "objective complete"] };
+    }
+    if (beat.kind === "debrief") {
+        return { keyword: ["report"] };
+    }
+    // default fallback
+    return { keyword: ["ok", "done"] };
+}
+
+function atForBeatInstance(beat) {
+    // Prefer a concrete target/exfil/drop coordinate if available
+    const c =
+        beat?.vars?.target?.coords ||
+        beat?.vars?.drop?.coords ||
+        beat?.vars?.exfil?.coords ||
+        null;
+    return c ? { lat: c.lat, lon: c.lon } : null;
+}
+
+
 app.post("/pcg/mission", async (req, res) => {
     try {
         const { lat, lng, radius = 800, seed } = req.body || {};
@@ -569,21 +617,19 @@ app.post("/pcg/mission", async (req, res) => {
             return res.status(400).json({ error: "lat,lng required" });
         }
 
+        // Reuse your existing park-selection logic for mission “anchor” & title
         const parks = await fetchParksNear(lat, lng, Math.min(radius, 1500));
         if (!parks.length) {
             return res.status(404).json({ error: "no_parks_found" });
         }
 
-        // score: prefer named + closer
         const scored = parks
             .map(p => ({
                 park: p,
-                score:
-                (p.name ? 2 : 0) - (haversineMeters(lat, lng, p.lat, p.lng) / 400), // ~-1 per 400m
+                score: (p.name ? 2 : 0) - (haversineMeters(lat, lng, p.lat, p.lng) / 400),
             }))
             .sort((a, b) => b.score - a.score);
 
-        // pick the first non-duplicate candidate
         let chosen = null;
         for (const s of scored) {
             const dup = await isDuplicateMission(s.park);
@@ -598,66 +644,100 @@ app.post("/pcg/mission", async (req, res) => {
 
         const npcId = await getOrCreateNpcId();
 
-        // --- find named landmark near chosen park ---
-        const landmarks = await fetchNamedLandmarksNear(chosen.lat, chosen.lng, 140);
-        const target = landmarks?.[0] || null;
+        // --- Planner integration starts here ---
+        // Build a temporary environment from the anchor location.
+            // (Later, replace fakeEnvFromPosition with Kotayba’s real service.)
+        const env = await fakeEnvFromPosition({ lat: chosen.lat, lon: chosen.lng });
 
-        let hint = "";
-        if (target) {
-            if (target.type === "plaque") hint = "Find the metal plaque nearby.";
-            else if (target.type === "memorial" || target.type === "monument") hint = "Look for the memorial stone in the square.";
-            else if (target.type === "artwork" || target.type === "sculpture") hint = "Find the sculpture on the plaza.";
-            else if (target.type === "info_board") hint = "Check the information board.";
-            else if (target.type === "cafe") hint = "Find a named café on the square.";
-            else hint = "Search for a landmark with a nameplate.";
+        // Produce planner steps (BeatInstances)
+        let planned = USE_PLANNER ? planMission({ lat: chosen.lat, lon: chosen.lng }, env, /*maxSteps*/ 7) : [];
+
+        // Safety: if planner returned too little, fall back to your old fixed shape
+        if (!planned || planned.length < 3) {
+            // minimal 3–4 beats inline fallback compatible with your chat gates
+            const CODE_WORDS = ["EMBER","ORION","GLASS","PHANTOM","VECTOR","ECHO","HARBOR","NIMBUS","SABLE","DELTA"];
+            const codePhrase = CODE_WORDS[missionSeed % CODE_WORDS.length];
+
+            // Try to get a target landmark to use a landmark gate
+            const landmarks = await fetchNamedLandmarksNear(chosen.lat, chosen.lng, 140);
+            const target = landmarks?.[0] || null;
+
+            let hint = "";
+            if (target) {
+                if (target.type === "plaque") hint = "Find the metal plaque nearby.";
+                else if (["memorial","monument"].includes(target.type)) hint = "Look for the memorial stone in the square.";
+                else if (["artwork","sculpture"].includes(target.type)) hint = "Find the sculpture on the plaza.";
+                else if (target.type === "info_board") hint = "Check the information board.";
+                else if (target.type === "cafe") hint = "Find a named café on the square.";
+                else hint = "Search for a landmark with a nameplate.";
+            }
+
+            planned = [
+                {
+                    templateId: 'fixed.brief',
+                    kind: "brief",
+                    title: "Incoming brief",
+                    description: "HQ is spinning up a quick op. Stay sharp.",
+                    npcPrompt: "Agent, we have a situation nearby. I’ll guide you.",
+                    vars: {
+                        spot: chosen.name || "the park",
+                        landmarkHint: target ? hint : "Find any named landmark in the park.",
+                        target: target ? { name: target.name, type: target.type, id: target.id } : null
+                    },
+                    meta: {}
+                },
+                {
+                    templateId: 'fixed.meet',
+                    kind: "meet",
+                    title: "Verify the location",
+                    description: "Confirm the correct landmark or give the code.",
+                    npcPrompt: "Identify the landmark; I’ll confirm.",
+                    vars: {
+                        spot: chosen.name || "the park",
+                        codePhrase: target ? null : codePhrase,
+                        target: target ? { name: target.name, type: target.type, id: target.id } : null
+                    },
+                    meta: {}
+                },
+                {
+                    templateId: 'fixed.resolve',
+                    kind: "resolve",
+                    title: "Wrap up",
+                    description: "Secure the objective and await exfil instructions.",
+                    npcPrompt: "Confirm once the objective is secured.",
+                    vars: { spot: chosen.name || "the park" },
+                    meta: {}
+                },
+                {
+                    templateId: 'fixed.debrief',
+                    kind: "debrief",
+                    title: "Debrief",
+                    description: "Nice work, Agent.",
+                    npcPrompt: "Mission complete. Send your report.",
+                    vars: {},
+                    meta: {}
+                },
+            ];
         }
 
-        const CODE_WORDS = ["EMBER","ORION","GLASS","PHANTOM","VECTOR","ECHO","HARBOR","NIMBUS","SABLE","DELTA"];
-        const codePhrase = CODE_WORDS[missionSeed % CODE_WORDS.length];
+        // Adapt planner beats to the exact shape your chat expects (id, kind, at, gates, vars)
+        const steps = planned.map((b, i) => ({
+            id: `${b.templateId || b.kind}@${chosen.id}#${i}`,
+            kind: b.kind,
+            at: atForBeatInstance(b) || { lat: chosen.lat, lon: chosen.lng },
+            gates: gatesForBeatInstance(b),
+            vars: {
+                spot: chosen.name || "the park",
+                ...b.vars
+            },
+            // keep text fields in case the app shows them anywhere
+            title: b.title,
+            description: b.description,
+            npcPrompt: b.npcPrompt,
+            meta: b.meta || {},
+        }));
 
-        // simple 3-beat plan at the same park A
-        const steps = [
-            {
-                id: `brief@${chosen.id}`,
-                kind: "brief",
-                at: { lat: chosen.lat, lon: chosen.lng },
-                gates: { keyword: ["ready", "briefed"] },
-                vars: {
-                    spot: chosen.name || "the park",
-                    landmarkHint: target ? hint : "uh oh ur on ur own >:^)",
-                    target: target ? { name: target.name, type: target.type, id: target.id } : null
-                }
-            },
-            {
-                id: `meet@${chosen.id}`,
-                kind: "meet",
-                at: { lat: chosen.lat, lon: chosen.lng },
-                gates: target
-                    ? { landmark: { name: target.name } }
-                    : { keyword: ["code", "confirmed"] },
-                vars: {
-                    spot: chosen.name || "the park",
-                    codePhrase: target ? null : codePhrase,
-                    target: target ? { name: target.name, type: target.type, id: target.id } : null
-                }
-            },
-            {
-                id: `resolve@${chosen.id}`,
-                kind: "resolve",
-                at: { lat: chosen.lat, lon: chosen.lng },
-                gates: { keyword: ["done", "secured", "objective complete"] },
-                vars: { spot: chosen.name || "the park" }
-            },
-            {
-                id: `debrief@${chosen.id}`,
-                kind: "debrief",
-                at: null,
-                gates: { keyword: ["report"] }, // <— simplified gate
-                vars: {}
-            }
-        ];
-
-        // insert into missions and return the row
+        // Insert into missions and return (keeps your existing generator blob)
         const { data: inserted, error: insErr } = await supabase
             .from("missions")
             .insert({
@@ -668,15 +748,19 @@ app.post("/pcg/mission", async (req, res) => {
                 npc_id: npcId,
                 seed: missionSeed,
                 generator: {
-                    algo: "parks-v1",
+                    algo: USE_PLANNER ? "planner.v1" : "parks-v1",
+                    featureFlags: { USE_PLANNER },
                     player: { lat, lng },
                     radius,
                     chosen,
                     top5: scored.slice(0,5).map(s => ({ id: s.park.id, score: s.score })),
+                    envSummary: {
+                        areaType: env?.areaType || "unknown",
+                        landmarkCount: env?.landmarks?.length || 0,
+                        hintCount: env?.hints?.length || 0,
+                    }
                 },
                 steps,
-                // opens_at: null,
-                // closes_at: null,
             })
             .select("*")
             .single();
