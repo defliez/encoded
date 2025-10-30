@@ -45,7 +45,7 @@ export default function MapScreen({ navigation }) {
 
     const { authUser, loading: userLoading } = useUser();
 
-    const ACCEPT_DISTANCE_METERS = 50;
+    const ACCEPT_DISTANCE_METERS = 5000;
 
     useFocusEffect(
         useCallback(() => {

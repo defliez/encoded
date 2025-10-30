@@ -3,7 +3,7 @@
 /**
  * @typedef {Object} BeatTemplate
  * @property {string} id                  // unique template id
- * @property {('brief'|'travel'|'recon'|'interact'|'puzzle'|'handoff'|'resolve'|'debrief')} kind
+ * @property {('brief'|'travel'|'recon'|'interact'|'debrief')} kind
  * @property {string[]} gates             // soft filters like ["area:park","landmark:bench"]
  * @property {string[]} pre               // facts required before this beat, e.g. ["has_briefing"]
  * @property {string[]} post              // facts added/removed after, e.g. ["has_package","!lead_cold"]

@@ -178,16 +178,55 @@ function matchesGate(text, beat) {
             : "";
 
         // Build context AFTER advancement
+        const v = beatForReply?.vars || {};
+        const targetName = v.target?.name || null;
+        const dropName   = v.drop?.name || null;
+        const verification = v.verification || null;
+
+        const facts = [
+            targetName ? `Target name: "${targetName}"` : null,
+            dropName   ? `Drop name: "${dropName}"`     : null,
+            verification?.kind ? `Verification kind: ${verification.kind}` : null,
+            verification?.phrase ? `Expected answer must include: "${verification.phrase}"` : null,
+            verification?.hint ? `Hint to show: ${verification.hint}` : null,
+        ].filter(Boolean).join("\n");
+
+        const perBeatRules =
+            beatForReply?.kind === "brief" ? `
+            - Ask if the operative is ready. Do NOT name any places yourself. Tell the operative to reply with "ready".` :
+
+            beatForReply?.kind === "travel" ? `
+            - Instruct the operative to go to the EXACT target shown in Facts. Tell the operative to reply with "arrived" when they have arrived at the target.
+            - Do NOT invent or substitute any other place names.` :
+
+            beatForReply?.kind === "recon" ? `
+            - Ask for the verification requested in Facts (e.g., cuisine, material).
+            - The expected answer MUST include the exact phrase shown in Facts.
+            - Do NOT reveal the answer yourself. One short sentence.` :
+
+            beatForReply?.kind === "debrief" ? `
+            - Tell the operative to reply with 'report' and sign off in one short sentence.` :
+
+            `
+            - Keep one short sentence, in-character. Do not invent objectives or names.
+            `;
+
+        const npcLine = beatForReply?.npcPrompt
+            ? `System cue (style/goal): ${beatForReply.npcPrompt}`
+            : ``;
+
         const beatContext = justCompleted
             ? `Mission complete. Deliver a terse debrief sign-off (1–2 sentences), in-character.`
             : beatForReply
             ? `Current beat: ${beatForReply.kind} at ${beatForReply?.vars?.spot || "the square"}.
-            Your role in THIS beat only (do not invent new beats/endings):
-            - brief: instruct the operative to find a named nearby civilian place and reply with its EXACT name. Provide a short hint if available.
-            - meet: if they reply with the correct landmark name, confirm and proceed. Never reveal the name yourself.
-            - resolve: confirm the cache is secured; give final instruction.
-            - debrief: acknowledge 'report' and sign off.
-            Keep it concise (≤2 sentences).`
+            Facts (authoritative; do NOT alter or invent):
+        ${facts || "(none)"}
+
+        Rules for this beat:
+        ${perBeatRules}
+
+        ${npcLine}
+        Keep it concise (≤2 sentences).`
             : `No active beat; be brief and in-character.`;
 
         // Build prompt (beat context first, persona after)
@@ -306,7 +345,7 @@ app.post("/npc-chat/first-message", async (req, res) => {
         Greet the operative in ONE short sentence. Set context for THIS beat only.
         - brief: outline objective and ask for "ready".
         - meet: acknowledge and mention the code phrase once.${meetHint}
-        - resolve/debrief: be concise and directive.
+        - debrief: be concise and directive.
         No extra lore, no new objectives.`
         : `Greet the operative briefly (ONE sentence). Keep it professional; do not invent objectives.`;
 
@@ -507,13 +546,11 @@ async function isDuplicateMission(spot) {
     function gatesForBeatInstance(beat) {
         if (beat.kind === "brief") return { keyword: ["ready", "briefed"] };
         if (beat.kind === "travel") return { keyword: ["arrived", "here", "at target"] };
-        if (beat.kind === "recon") return { keyword: ["found", "clue", "marker", "saw"] };
-        if (beat.kind === "puzzle") return { keyword: ["decoded", "answer", "solved"] };
-        if (beat.kind === "handoff") {
-            const name = beat?.vars?.drop?.name;
-            return name ? { landmark: { name } } : { keyword: ["package", "dead drop", "cache"] };
+        if (beat.kind === "recon") {
+            const phrase = beat?.vars?.verification?.phrase;
+            if (phrase) return { keyword: [phrase] };
+            return { keyword: ["found", "clue", "marker", "saw"] };
         }
-        if (beat.kind === "resolve") return { keyword: ["done", "secured", "objective complete"] };
         if (beat.kind === "debrief") return { keyword: ["report"] };
         return { keyword: ["ok", "done"] };
     }
@@ -635,15 +672,6 @@ function atForBeatInstance(beat) {
                             codePhrase: target ? null : codePhrase,
                             target: target ? { name: target.name, type: target.type, id: target.id } : null
                         },
-                        meta: {}
-                    },
-                    {
-                        templateId: 'fixed.resolve',
-                        kind: "resolve",
-                        title: "Wrap up",
-                        description: "Secure the objective and await exfil instructions.",
-                        npcPrompt: "Confirm once the objective is secured.",
-                        vars: { spot: chosen.name || "the square" },
                         meta: {}
                     },
                     {
