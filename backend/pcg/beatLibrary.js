@@ -73,54 +73,121 @@ const T = (l) => (s) => s.replace(/\s+/g, " ").trim(); // tiny minifier
             npcPrompt: () => `Hold position and await the next cue.`,
         },
 
-        /* ---------- RECON (gather basic intel at target) ---------- */
+        /* ---------- RECON (VARIANTS by target type) ---------- */
+        // Generic fallback (if no specialized variant fits)
         {
             id: "recon.scan_target",
-            kind: "recon",
-            gates: ["area:any"],
-            pre: ["at_target"],
-            post: ["mission_objective_complete"],
+                kind: "recon",
+                gates: ["area:any"],
+                pre: ["at_target"],
+                post: ["intel_basic"], // this completes the objective in the "no-resolve" world
             vars: { target: "landmark" },
-            title: ({ target }) => `Recon at ${target.name}`,
-            description: ({ target, verification }) =>
-            verification?.hint
-            ? verification.hint
-            : T`Observe the area around ${target.name}. Look for a clue or marker.`,
-            npcPrompt: ({ verification }) =>
-            verification?.prompt
-            ? verification.prompt
-            : `Do a quick sweep. What stands out?`,
-        },
-        {
-            id: "recon.observe_terrace",
-            kind: "recon",
-            gates: ["area:any", "landmark:restaurant|bar|pub|cafe|bakery|ice_cream"],
-            pre: ["at_target"],
-            post: ["mission_objective_complete"],
-            vars: { target: "landmark" },
-            title: ({ target }) => `Observe ${target.name}`,
-            description: ({ target }) => T`Scan the seating and entrances at ${target.name}.`,
-            npcPrompt: () => `Any patterns or suspicious behavior?`,
-        },
-        {
-            id: "recon.read_signage",
-            kind: "recon",
-            gates: ["area:any", "landmark:info_board|plaque|sign"],
-            pre: ["at_target"],
-            post: ["mission_objective_complete"],
-            vars: { target: "landmark" },
-            title: ({ target }) => `Check signage at ${target.name}`,
-            description: ({ target }) => T`Look closely for names, numbers or symbols on ${target.name}.`,
-            npcPrompt: () => `Report any codes, initials, or dates.`,
+                title: ({ target }) => `Recon at ${target.name}`,
+                description: ({ target, verification }) =>
+                verification?.hint
+                ? verification.hint
+                : T`Observe the area around ${target.name}. Look for a clue or marker.`,
+                npcPrompt: ({ verification }) =>
+                verification?.prompt ? verification.prompt : `Do a quick sweep. What stands out?`,
         },
 
+        /* ---------- RECON: RESTAURANT (2 variations) ---------- */
+        // V1: Reveal NAME, ask for CUISINE (gate: cuisine keyword)
+        {
+            id: "recon.restaurant_ask_cuisine",
+                kind: "recon",
+                gates: ["area:any", "landmark:restaurant"],
+                pre: ["at_target"],
+                post: ["intel_basic"],
+                vars: { target: "landmark", verification: "hint" }, // planner fills verification
+            title: ({ target }) => `Confirm cuisine at ${target.name}`,
+                description: ({ target }) =>
+                T`The restaurant is ${target.name}. Tell me the cuisine they serve.`,
+                npcPrompt: () => `Report the cuisine.`,
+        },
+        // V2: Reveal CUISINE, ask for NAME (gate: landmark name)
+        {
+            id: "recon.restaurant_ask_name",
+                kind: "recon",
+                gates: ["area:any", "landmark:restaurant"],
+                pre: ["at_target"],
+                post: ["intel_basic"],
+                vars: { target: "landmark", verification: "hint" }, // planner fills verification
+            title: () => `Identify the restaurant`,
+                description: ({ verification }) =>
+                verification?.revealCuisine
+                ? T`They serve ${verification.revealCuisine}. Tell me the exact name of the restaurant on the sign.`
+                : T`Tell me the exact name of the restaurant on the sign.`,
+                npcPrompt: () => `Report the exact place name.`,
+        },
 
-        /* ---------- DEBRIEF ---------- */
+        /* ---------- RECON: CAFE/BAKERY (2 variations) ---------- */
+        // V1: Reveal NAME, ask for TYPE (gate: "bakery"/"cafe"/"ice_cream" keyword derived by planner)
+        {
+            id: "recon.cafe_ask_type",
+                kind: "recon",
+                gates: ["area:any", "landmark:cafe|bakery|ice_cream"],
+                pre: ["at_target"],
+                post: ["intel_basic"],
+                vars: { target: "landmark", verification: "hint" },
+                title: ({ target }) => `Confirm the venue type at ${target.name}`,
+                description: ({ target }) =>
+                T`${target.name} is the spot. What kind of venue is it?`,
+                npcPrompt: () => `State the venue type.`,
+        },
+        // V2: Reveal TYPE, ask for NAME (gate: landmark name)
+        {
+            id: "recon.cafe_ask_name",
+                kind: "recon",
+                gates: ["area:any", "landmark:cafe|bakery|ice_cream"],
+                pre: ["at_target"],
+                post: ["intel_basic"],
+                vars: { target: "landmark", verification: "hint" },
+                title: () => `Identify the venue`,
+                description: ({ verification }) =>
+                verification?.revealType
+                ? T`It’s a ${verification.revealType}. Tell me the EXACT venue name on the sign.`
+                : T`Tell me the EXACT venue name on the sign.`,
+                npcPrompt: () => `Report the exact place name.`,
+        },
+
+        /* ---------- RECON: STATUE/ARTWORK (2 variations) ---------- */
+        // V1: Reveal NAME, ask for MATERIAL (gate: material keyword)
+        {
+            id: "recon.art_ask_material",
+                kind: "recon",
+                gates: ["area:any", "landmark:statue|memorial|artwork|monument"],
+                pre: ["at_target"],
+                post: ["intel_basic"],
+                vars: { target: "landmark", verification: "hint" },
+                title: ({ target }) => `Verify material at ${target.name}`,
+                description: ({ target }) =>
+                T`${target.name} identified. What material is it made of?`,
+                npcPrompt: () => `Report the material.`,
+        },
+        // V2: Reveal MATERIAL, ask for NAME (gate: landmark name)
+        {
+            id: "recon.art_ask_name",
+                kind: "recon",
+                gates: ["area:any", "landmark:statue|memorial|artwork|monument"],
+                pre: ["at_target"],
+                post: ["intel_basic"],
+                vars: { target: "landmark", verification: "hint" },
+                title: () => `Identify the monument`,
+                description: ({ verification }) =>
+                verification?.revealMaterial
+                ? T`It’s made of ${verification.revealMaterial}. Tell me the exact monument name.`
+                : T`Tell me the exact monument name.`,
+                npcPrompt: () => `Report the exact place name.`,
+        },
+
+        /* ---------- DEBRIEF (no resolve anymore) ---------- */
         {
             id: "debrief.basic",
             kind: "debrief",
             gates: ["area:any"],
-            pre: ["mission_objective_complete"],
+            // Important: since we removed 'resolve', debrief comes after recon success
+            pre: ["intel_basic"],
             post: ["mission_complete"],
             vars: {},
             title: () => "Debrief",
