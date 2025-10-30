@@ -14,7 +14,7 @@ import redEye from './assets/technology.png';
 import blackEye from './assets/focus.png';
 
 // temp for testing
-const BACKEND_BASE = 'http://192.168.0.127:3000';
+const BACKEND_BASE = 'http://192.168.0.229:3000';
 
 function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
@@ -45,7 +45,7 @@ export default function MapScreen({ navigation }) {
 
     const { authUser, loading: userLoading } = useUser();
 
-    const ACCEPT_DISTANCE_METERS = 1000;
+    const ACCEPT_DISTANCE_METERS = 5000;
 
     useFocusEffect(
         useCallback(() => {
@@ -99,7 +99,7 @@ export default function MapScreen({ navigation }) {
                         setLoadingPois(true);
                         try {
                             const { latitude, longitude } = loc.coords;
-                            const url = `${BACKEND_BASE}/pcg/pois?lat=${latitude}&lng=${longitude}&radius=1200`;
+                            const url = `${BACKEND_BASE}/pcg/pois?lat=${latitude}&lng=${longitude}&radius=5000`;
                             const resp = await fetch(url);
                             if (!resp.ok) throw new Error(`POI fetch failed: ${resp.status}`);
                             const json = await resp.json();
