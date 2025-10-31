@@ -1,7 +1,6 @@
-// MapScreen.js
 import SPY_MAP_STYLE from './SpyMapStyle';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator, Image, Pressable, Text } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,19 +12,24 @@ import blueEye from './assets/view.png';
 import redEye from './assets/technology.png';
 import blackEye from './assets/focus.png';
 
-// temp for testing
-const BACKEND_BASE = 'http://192.168.0.229:3000';
+const BACKEND_BASE = 'http://192.168.0.127:3000';
+
+const ACCEPT_DISTANCE_METERS = 50;
+const GENERATION_RADIUS_METERS = 500;
+const SCAN_SWEEP_MS = 1200;
+const SCAN_STEPS = 24;
+const MAX_GENERATION_CALLS = 60;
+const DUPLICATE_TOLERANCE = 5;
 
 function getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
     const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.sin(dLat / 2) ** 2 +
         Math.cos((lat1 * Math.PI) / 180) *
         Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+        Math.sin(dLon / 2) ** 2;
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
@@ -36,16 +40,14 @@ export default function MapScreen({ navigation }) {
     const [acceptedMissions, setAcceptedMissions] = useState({});
     const [loading, setLoading] = useState(true);
 
-    const [pois, setPois] = useState([]);
-    const [loadingPois, setLoadingPois] = useState(false);
-
-    // radar scanning UI state
     const [scanning, setScanning] = useState(false);
     const [scanRadius, setScanRadius] = useState(0);
+    const sweepTimerRef = useRef(null);
+
+    const [generating, setGenerating] = useState(false);
+    const [generatedCount, setGeneratedCount] = useState(0);
 
     const { authUser, loading: userLoading } = useUser();
-
-    const ACCEPT_DISTANCE_METERS = 5000;
 
     useFocusEffect(
         useCallback(() => {
@@ -54,7 +56,6 @@ export default function MapScreen({ navigation }) {
             const fetchLocationAndMissions = async () => {
                 try {
                     setLoading(true);
-
                     const { status } = await Location.requestForegroundPermissionsAsync();
                     if (status !== 'granted') {
                         alert('Location permission denied');
@@ -81,34 +82,15 @@ export default function MapScreen({ navigation }) {
 
                     const filtered = allMissions.filter((mission) => {
                         const p = participationMap[mission.id];
-
                         if (!p) return true;
                         if (!p.completed_at) return true;
                         if (['fail', 'abandoned'].includes(p.status)) return true;
-
                         return false;
                     });
 
                     if (isActive) {
                         setMissions(filtered);
                         setAcceptedMissions(participationMap);
-                    }
-
-                    // --- fetch OSM POIs for pcg testing ---
-                    if (isActive && loc?.coords) {
-                        setLoadingPois(true);
-                        try {
-                            const { latitude, longitude } = loc.coords;
-                            const url = `${BACKEND_BASE}/pcg/pois?lat=${latitude}&lng=${longitude}&radius=5000`;
-                            const resp = await fetch(url);
-                            if (!resp.ok) throw new Error(`POI fetch failed: ${resp.status}`);
-                            const json = await resp.json();
-                            if (isActive) setPois(json.pois || []);
-                        } catch (e) {
-                            console.warn('POI fetch error:', e);
-                        } finally {
-                            if (isActive) setLoadingPois(false);
-                        }
                     }
                 } catch (err) {
                     console.error('Error fetching map data:', err);
@@ -118,71 +100,131 @@ export default function MapScreen({ navigation }) {
             };
 
             fetchLocationAndMissions();
-
             return () => {
                 isActive = false;
             };
         }, [authUser?.id])
     );
 
-    // ------- radar scan logic: animate a sweep then generate a mission -------
     useEffect(() => {
-        if (!scanning) return;
-        setScanRadius(0);
+        if (sweepTimerRef.current) {
+            clearInterval(sweepTimerRef.current);
+            sweepTimerRef.current = null;
+        }
+        if (!scanning) {
+            setScanRadius(0);
+            return;
+        }
 
-        const steps = 20; // number of increments during the sweep
-        const durationMs = 1600; // total sweep duration
-        const stepMs = Math.floor(durationMs / steps);
-        const increment = ACCEPT_DISTANCE_METERS / steps;
+        const steps = SCAN_STEPS;
+        const stepMs = Math.floor(SCAN_SWEEP_MS / steps);
+        const increment = GENERATION_RADIUS_METERS / steps;
 
         let r = 0;
-        const id = setInterval(async () => {
-            r += increment;
-            setScanRadius(r);
+        setScanRadius(0);
 
-            if (r >= ACCEPT_DISTANCE_METERS) {
-                clearInterval(id);
-                await generateMissionWithinScan(); // call backend after sweep finishes
-                setScanning(false);
-            }
+        sweepTimerRef.current = setInterval(() => {
+            r += increment;
+            if (r >= GENERATION_RADIUS_METERS) r = 0;
+            setScanRadius(r);
         }, stepMs);
 
-        return () => clearInterval(id);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        return () => {
+            if (sweepTimerRef.current) {
+                clearInterval(sweepTimerRef.current);
+                sweepTimerRef.current = null;
+            }
+        };
     }, [scanning]);
 
-    async function generateMissionWithinScan() {
+    async function tryBatchGenerate(lat, lng) {
         try {
-            if (!location?.coords) return;
-            const body = {
-                lat: location.coords.latitude,
-                lng: location.coords.longitude,
-                radius: ACCEPT_DISTANCE_METERS, // generate within the radar circle
-            };
-            const resp = await fetch(`${BACKEND_BASE}/pcg/mission`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
+            const url = `${BACKEND_BASE}/pcg/missions?lat=${lat}&lng=${lng}&radius=${GENERATION_RADIUS_METERS}`;
+            const resp = await fetch(url);
+            if (!resp.ok) return { ok: false, missions: [] };
             const json = await resp.json();
-            if (!resp.ok) {
-                console.warn('Generate mission failed:', json);
-                return;
-            }
-
-            // add newly created mission locally so it appears immediately
-            setMissions((prev) => {
-                const exists = prev.some((m) => m.id === json.mission.id);
-                return exists ? prev : [...prev, json.mission];
-            });
-        } catch (e) {
-            console.warn('generateMission error', e);
+            const newMissions = Array.isArray(json?.missions) ? json.missions : [];
+            return { ok: true, missions: newMissions };
+        } catch {
+            return { ok: false, missions: [] };
         }
     }
 
-    function startScan() {
-        if (scanning) return;
+    async function fallbackLoopGenerate(lat, lng) {
+        let createdIds = [];
+        let noProgressStreak = 0;
+
+        for (let i = 0; i < MAX_GENERATION_CALLS; i++) {
+            try {
+                const resp = await fetch(`${BACKEND_BASE}/pcg/mission`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat, lng, radius: GENERATION_RADIUS_METERS }),
+                });
+
+                if (resp.status === 204) break;
+                const json = await resp.json();
+
+                if (!resp.ok) {
+                    if (json?.done || json?.noMore || json?.reason === 'exhausted' || resp.status === 404 || resp.status === 409) break;
+                    console.warn('Generate mission failed:', json);
+                    break;
+                }
+
+                const m = json?.mission;
+                if (!m?.id) {
+                    noProgressStreak++;
+                } else {
+                    const already = createdIds.includes(m.id) || missions.some((x) => x.id === m.id);
+                    if (already) {
+                        noProgressStreak++;
+                    } else {
+                        createdIds.push(m.id);
+                        setMissions((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+                        setGeneratedCount((c) => c + 1);
+                        noProgressStreak = 0;
+                    }
+                }
+
+                if (noProgressStreak >= DUPLICATE_TOLERANCE) break;
+                await new Promise((res) => setTimeout(res, 120));
+            } catch (e) {
+                console.warn('fallback generation error:', e);
+                break;
+            }
+        }
+
+        return createdIds.length;
+    }
+
+    async function generateAllMissionsWithinRadius() {
+        if (!location?.coords || generating) return;
+        const { latitude, longitude } = location.coords;
+
+        setGenerating(true);
+        setGeneratedCount(0);
         setScanning(true);
+
+        try {
+            const batch = await tryBatchGenerate(latitude, longitude);
+            if (batch.ok && batch.missions.length) {
+                setMissions((prev) => {
+                    const seen = new Set(prev.map((m) => m.id));
+                    const fresh = batch.missions.filter((m) => !seen.has(m.id));
+                    setGeneratedCount(fresh.length);
+                    return fresh.length ? [...prev, ...fresh] : prev;
+                });
+            } else {
+                await fallbackLoopGenerate(latitude, longitude);
+            }
+        } finally {
+            setScanning(false);
+            setGenerating(false);
+        }
+    }
+
+    function onPressGenerate() {
+        generateAllMissionsWithinRadius();
     }
 
     if (!authUser || !location || userLoading || loading) {
@@ -203,39 +245,21 @@ export default function MapScreen({ navigation }) {
                 }}
                 showsUserLocation={true}
             >
-                {/* Player scan radius (static) */}
                 <Circle
-                    center={{
-                        latitude: location.coords.latitude,
-                        longitude: location.coords.longitude,
-                    }}
+                    center={{ latitude: location.coords.latitude, longitude: location.coords.longitude }}
                     radius={ACCEPT_DISTANCE_METERS}
                     strokeColor="rgba(0,0,0,0.3)"
                     fillColor="rgba(0,255,0,0.1)"
                 />
 
-                {/* Radar sweep visualization during scanning */}
                 {scanning && (
                     <Circle
-                        center={{
-                            latitude: location.coords.latitude,
-                            longitude: location.coords.longitude,
-                        }}
+                        center={{ latitude: location.coords.latitude, longitude: location.coords.longitude }}
                         radius={scanRadius}
-                        strokeColor="rgba(0,255,0,0.6)"
-                        fillColor="rgba(0,255,0,0.15)"
+                        strokeColor="rgba(0,255,0,0.7)"
+                        fillColor="rgba(0,255,0,0.18)"
                     />
                 )}
-
-                {/* --- PCG: show POIs (green pins) for sanity check --- */}
-                {pois.map((p) => (
-                    <Marker
-                        key={`poi-${p.id}`}
-                        coordinate={{ latitude: p.lat, longitude: p.lng }}
-                        title={p.name || p.category}
-                        pinColor="green"
-                    />
-                ))}
 
                 {missions.map((mission) => {
                     const distance = getDistanceFromLatLonInMeters(
@@ -247,7 +271,6 @@ export default function MapScreen({ navigation }) {
 
                     const withinRange = distance <= ACCEPT_DISTANCE_METERS;
                     const isAccepted = !!acceptedMissions[mission.id];
-
                     const markerIcon = isAccepted ? blackEye : withinRange ? blueEye : redEye;
 
                     return (
@@ -264,10 +287,7 @@ export default function MapScreen({ navigation }) {
                             }
                             onPress={() => {
                                 if (withinRange || isAccepted) {
-                                    navigation.navigate('MissionDetails', {
-                                        mission,
-                                        playerId: authUser.id,
-                                    });
+                                    navigation.navigate('MissionDetails', { mission, playerId: authUser.id });
                                 }
                             }}
                         >
@@ -277,23 +297,22 @@ export default function MapScreen({ navigation }) {
                 })}
             </MapView>
 
-            {loadingPois && <ActivityIndicator style={{ position: 'absolute', top: 16, right: 16 }} />}
-
-            {/* --- floating Scan button --- */}
-            <Pressable onPress={startScan} style={[styles.fab, scanning && styles.fabDisabled]} disabled={scanning}>
-                <Text style={styles.fabText}>{scanning ? 'Scanning…' : 'Scan'}</Text>
+            <Pressable
+                onPress={onPressGenerate}
+                style={[styles.fab, generating && styles.fabDisabled]}
+                disabled={generating}
+            >
+                <Text style={styles.fabText}>
+                    {generating ? `Generating… (${generatedCount})` : 'Scan 500m'}
+                </Text>
             </Pressable>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    map: {
-        flex: 1,
-    },
+    container: { flex: 1 },
+    map: { flex: 1 },
     fab: {
         position: 'absolute',
         right: 24,
@@ -307,8 +326,6 @@ const styles = StyleSheet.create({
         shadowRadius: 6,
         shadowOffset: { width: 0, height: 3 },
     },
-    fabDisabled: {
-        opacity: 0.6,
-    },
+    fabDisabled: { opacity: 0.6 },
     fabText: { color: '#000', fontWeight: '700' },
 });

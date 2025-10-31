@@ -14,7 +14,7 @@ import { supabase } from './supabaseClient';
 import { useUser } from './UserContext';
 import TypewriterText from './components/TypewriterText';
 
-const BACKEND_URL = "http://192.168.0.229:3000";
+const BACKEND_URL = "http://192.168.0.127:3000";
 
 export default function NPCChat({ route }) {
     const { npcId, missionId, missionTitle } = route.params;
