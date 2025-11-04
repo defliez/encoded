@@ -12,7 +12,8 @@ import blueEye from './assets/view.png';
 import redEye from './assets/technology.png';
 import blackEye from './assets/focus.png';
 
-const BACKEND_BASE = 'http://192.168.0.127:3000';
+const BACKEND_BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+
 
 const ACCEPT_DISTANCE_METERS = 50;
 const GENERATION_RADIUS_METERS = 500;
