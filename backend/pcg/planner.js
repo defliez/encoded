@@ -4,6 +4,37 @@ import { makeWorldState, hasAll, applyPost, gateMatch } from './world.js';
 import { bindVars } from './binders.js';
 import { selectVerification } from './verifier.js';
 
+function classifyPOI(t) {
+    if (!t) return 'other';
+    const tags = t.tags || {};
+    const amenity = tags.amenity || '';
+    const shop = tags.shop || '';
+    const type = t.type || '';
+
+    // food venues
+    if (amenity === 'restaurant' || type === 'restaurant') return 'restaurant';
+    if (amenity === 'cafe' || type === 'cafe') return 'cafe';
+    if (shop === 'bakery' || type === 'bakery' || type === 'shop:bakery') return 'bakery';
+    if (amenity === 'ice_cream' || type === 'ice_cream') return 'ice_cream';
+
+    // artwork / statue / monument
+    const artworkish = new Set(['statue', 'memorial', 'artwork', 'monument']);
+    if (artworkish.has(tags.artwork_type) || artworkish.has(type) || tags.tourism === 'artwork')
+        return 'art';
+
+    return 'other';
+}
+
+function reconTemplateFitsTarget(tmplId, category) {
+    if (tmplId.startsWith('recon.restaurant_')) return category === 'restaurant';
+    if (tmplId.startsWith('recon.cafe_')) return (category === 'cafe' || category === 'bakery' || category === 'ice_cream');
+    if (tmplId.startsWith('recon.art_')) return category === 'art';
+    // Generic recon fits anything
+    if (tmplId === 'recon.scan_target') return true;
+    return true; // default permissive
+}
+
+
 /**
 * @param {{lat:number, lon:number}} pos
 * @param {object} env
@@ -14,6 +45,8 @@ export function planMission(pos, env, maxSteps = 6) {
     const state = makeWorldState([], { pos, env });
     const out = [];
     const usedKinds = new Set();
+
+    let lastTarget = null;
 
     // No 'resolve' anymore
     const wantOrder = ['brief', 'travel', 'recon', 'debrief'];
@@ -37,7 +70,15 @@ export function planMission(pos, env, maxSteps = 6) {
 
             // attach verification ONLY for recon and specialize per template id
             if (tmpl.kind === 'recon') {
+                if (lastTarget) {
+                    binding.target = lastTarget;
+                }
                 const t = binding.target || null;
+                const category = classifyPOI(t);
+
+                // skip recon varian if doesn't fit target type
+                if (!reconTemplateFitsTarget(tmpl.id, category)) continue;
+
                 const tags = t?.tags || {};
                 // Helper to grab a single token from e.g. "pizza;pasta"
                 const pickToken = (s) => (typeof s === 'string' ? s.split(/[;,\|]/)[0].trim() : null);
@@ -164,6 +205,11 @@ export function planMission(pos, env, maxSteps = 6) {
         if (!picked) continue;
 
         const { tmpl, binding } = picked;
+
+        if (tmpl.kind === 'travel') {
+            lastTarget = binding.target || binding.drop || binding.exfil || null;
+        }
+
         usedKinds.add(tmpl.kind);
 
         const instance = {
