@@ -1,4 +1,4 @@
-import SPY_MAP_STYLE from './SpyMapStyle';
+import DISCO_MAP_STYLE from './DiscoMapStyle';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator, Image, Pressable, Text } from 'react-native';
@@ -7,13 +7,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { supabase } from './supabaseClient';
 import { useUser } from './UserContext';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import blueEye from './assets/view.png';
 import redEye from './assets/technology.png';
 import blackEye from './assets/focus.png';
 
 const BACKEND_BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
-
 
 const ACCEPT_DISTANCE_METERS = 50;
 const GENERATION_RADIUS_METERS = 500;
@@ -49,6 +49,9 @@ export default function MapScreen({ navigation }) {
     const [generatedCount, setGeneratedCount] = useState(0);
 
     const { authUser, loading: userLoading } = useUser();
+
+    const mapRef = useRef(null);
+    const [mapReady, setMapReady] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -107,6 +110,7 @@ export default function MapScreen({ navigation }) {
         }, [authUser?.id])
     );
 
+    // Sweep animation for the scan circle
     useEffect(() => {
         if (sweepTimerRef.current) {
             clearInterval(sweepTimerRef.current);
@@ -137,6 +141,21 @@ export default function MapScreen({ navigation }) {
             }
         };
     }, [scanning]);
+
+    // Tilted / styled camera once map + location are ready
+    useEffect(() => {
+        if (!mapReady || !location?.coords || !mapRef.current) return;
+
+        mapRef.current.animateCamera({
+            center: {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+            },
+            pitch: 55,
+            heading: 20,
+            zoom: 16,
+        });
+    }, [mapReady, location]);
 
     async function tryBatchGenerate(lat, lng) {
         try {
@@ -229,15 +248,24 @@ export default function MapScreen({ navigation }) {
     }
 
     if (!authUser || !location || userLoading || loading) {
-        return <ActivityIndicator style={{ flex: 1 }} size="large" color="black" />;
+        return (
+            <LinearGradient
+                colors={['#05060a', '#101320', '#151821']}
+                style={styles.loadingContainer}
+            >
+                <ActivityIndicator size="large" color="#ffb15e" />
+                <Text style={styles.loadingText}>Initializing field ops…</Text>
+            </LinearGradient>
+        );
     }
 
     return (
         <View style={styles.container}>
             <MapView
+                ref={mapRef}
                 style={styles.map}
                 provider="google"
-                customMapStyle={SPY_MAP_STYLE}
+                customMapStyle={DISCO_MAP_STYLE}
                 initialRegion={{
                     latitude: location.coords.latitude,
                     longitude: location.coords.longitude,
@@ -245,20 +273,22 @@ export default function MapScreen({ navigation }) {
                     longitudeDelta: 0.01,
                 }}
                 showsUserLocation={true}
+                followsUserLocation={true}
+                onMapReady={() => setMapReady(true)}
             >
                 <Circle
                     center={{ latitude: location.coords.latitude, longitude: location.coords.longitude }}
                     radius={ACCEPT_DISTANCE_METERS}
-                    strokeColor="rgba(0,0,0,0.3)"
-                    fillColor="rgba(0,255,0,0.1)"
+                    strokeColor="rgba(102,240,198,0.7)"
+                    fillColor="rgba(102,240,198,0.15)"
                 />
 
                 {scanning && (
                     <Circle
                         center={{ latitude: location.coords.latitude, longitude: location.coords.longitude }}
                         radius={scanRadius}
-                        strokeColor="rgba(0,255,0,0.7)"
-                        fillColor="rgba(0,255,0,0.18)"
+                        strokeColor="rgba(255,177,94,0.8)"
+                        fillColor="rgba(255,177,94,0.15)"
                     />
                 )}
 
@@ -298,35 +328,146 @@ export default function MapScreen({ navigation }) {
                 })}
             </MapView>
 
+            {/* Scanline / CRT overlay */}
+            <View pointerEvents="none" style={styles.scanOverlay}>
+                {/* Vignette & subtle horizontal banding */}
+                <LinearGradient
+                    colors={[
+                        'rgba(0,0,0,0.55)',
+                        'rgba(0,0,0,0.15)',
+                        'rgba(0,0,0,0.35)',
+                        'rgba(0,0,0,0.15)',
+                        'rgba(0,0,0,0.55)',
+                    ]}
+                    locations={[0, 0.2, 0.5, 0.8, 1]}
+                    style={styles.scanGradient}
+                />
+            </View>
+
+            {/* Top HUD overlay */}
+            <View style={styles.hudTop}>
+                {(scanning || generating) && (
+                    <View style={styles.statusPill}>
+                        <Text style={styles.statusPillText}>
+                            {generating ? `SCANNING AREA · ${generatedCount} hits` : 'SCANNING AREA'}
+                        </Text>
+                    </View>
+                )}
+            </View>
+
             <Pressable
                 onPress={onPressGenerate}
                 style={[styles.fab, generating && styles.fabDisabled]}
                 disabled={generating}
             >
-                <Text style={styles.fabText}>
-                    {generating ? `Generating… (${generatedCount})` : 'Scan 500m'}
-                </Text>
+                <LinearGradient
+                    colors={generating ? ['#555555', '#333333'] : ['#ffb15e', '#ff9a3c']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.fabInner}
+                >
+                    <Text style={styles.fabLabel}>SCAN RADIUS 500m</Text>
+                    <Text style={styles.fabText}>
+                        {generating ? `Running sweep (${generatedCount})` : 'Tap to deploy'}
+                    </Text>
+                </LinearGradient>
             </Pressable>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1 },
+    container: { flex: 1, backgroundColor: '#05060a' },
     map: { flex: 1 },
+    loadingContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadingText: {
+        marginTop: 12,
+        color: '#f1e9dc',
+        fontSize: 14,
+        letterSpacing: 1,
+    },
+    // Scanline / CRT overlay styles
+    scanOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 1,
+    },
+    scanGradient: {
+        flex: 1,
+    },
+    hudTop: {
+        position: 'absolute',
+        top: 40,
+        left: 16,
+        right: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        zIndex: 2,
+    },
+    hudTitleBlock: {
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        backgroundColor: 'rgba(7, 9, 15, 0.9)',
+        borderWidth: 1,
+        borderColor: 'rgba(90, 100, 130, 0.8)',
+    },
+    hudTitle: {
+        color: '#f1e9dc',
+        fontSize: 13,
+        letterSpacing: 2,
+        fontWeight: '700',
+    },
+    hudSubtitle: {
+        marginTop: 2,
+        color: '#9da6b8',
+        fontSize: 11,
+    },
+    statusPill: {
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 999,
+        backgroundColor: 'rgba(255, 177, 94, 0.15)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 177, 94, 0.8)',
+        alignSelf: 'flex-start',
+    },
+    statusPillText: {
+        color: '#ffb15e',
+        fontSize: 11,
+        letterSpacing: 1,
+    },
     fab: {
         position: 'absolute',
         right: 24,
         bottom: 24,
-        backgroundColor: '#8bc34a',
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        borderRadius: 10,
+        borderRadius: 12,
         shadowColor: '#000',
         shadowOpacity: 0.4,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 3 },
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 6 },
+        overflow: 'hidden',
+        zIndex: 3,
     },
-    fabDisabled: { opacity: 0.6 },
-    fabText: { color: '#000', fontWeight: '700' },
+    fabInner: {
+        paddingHorizontal: 18,
+        paddingVertical: 12,
+    },
+    fabDisabled: { opacity: 0.7 },
+    fabLabel: {
+        color: '#151821',
+        fontSize: 11,
+        letterSpacing: 2,
+        fontWeight: '700',
+    },
+    fabText: {
+        color: '#151821',
+        fontWeight: '700',
+        fontSize: 14,
+    },
 });
+
