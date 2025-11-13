@@ -119,7 +119,8 @@ export default function ActiveMissionsScreen({ navigation }) {
                     onPress={() =>
                         navigation.navigate('NPCChat', {
                             npcId: item.missions.npc_id,
-                            missionId: item.missions.id
+                            missionId: item.missions.id,
+                            missionTitle: item.missions.title,
                         })
                     }
                 >
