@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Button, FlatList, StyleSheet, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
 import { useUser } from './UserContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from './supabaseClient';
@@ -67,43 +67,71 @@ export default function ActiveMissionsScreen({ navigation }) {
         );
     };
 
-    if (userLoading || loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
+    if (userLoading || loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#ffb15e" />
+                <Text style={styles.loadingText}>Fetching active missions...</Text>
+            </View>
+        );
+    }
 
     if (!missions || missions.length === 0) {
         return (
-            <View style={styles.container}>
-                <Text style={styles.message}>No active mission</Text>
+            <View style={styles.emptyContainer}>
+                <Text style={styles.emptyTitle}>No active mission</Text>
+                <Text style={styles.emptyMessage}>
+                    Scan the city from the map screen to pick up new work.
+                </Text>
             </View>
         );
     }
 
     const renderItem = ({ item }) => (
         <View style={styles.missionBox}>
+            <Text style={styles.label}>CONTRACT</Text>
             <Text style={styles.title}>{item.missions.title}</Text>
             <Text style={styles.description}>{item.missions.description}</Text>
+
             <View style={styles.missionDetails}>
-                <Button
-                    title="Details"
+                {item.started_at && (
+                    <Text style={styles.metaText}>
+                        Started: {new Date(item.started_at).toLocaleString()}
+                    </Text>
+                )}
+            </View>
+
+            <View style={styles.missionDetails}>
+                <TouchableOpacity
+                    style={styles.actionButton}
                     onPress={() =>
                         navigation.navigate('MissionDetails', {
                             mission: item.missions,
                             playerId: authUser.id,
                         })
                     }
-                />
-                <Button
-                    title="Chat"
+                >
+                    <Text style={styles.actionButtonText}>Details</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.actionButton, styles.actionButtonSecondary]}
                     onPress={() =>
                         navigation.navigate('NPCChat', {
                             npcId: item.missions.npc_id,
                             missionId: item.missions.id
                         })
                     }
-                />
-                <Button
-                    title="Abandon"
+                >
+                    <Text style={styles.actionButtonText}>Chat</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.actionButton, styles.actionButtonDanger]}
                     onPress={() => abandonMission(item.mission_id, item.missions.title)}
-                />
+                >
+                    <Text style={styles.actionButtonText}>Abandon</Text>
+                </TouchableOpacity>
             </View>
         </View>
     );
@@ -114,6 +142,7 @@ export default function ActiveMissionsScreen({ navigation }) {
                 data={missions}
                 keyExtractor={(item) => String(item.id)}
                 renderItem={renderItem}
+                contentContainerStyle={styles.listContent}
             />
         </View>
     );
@@ -122,37 +151,100 @@ export default function ActiveMissionsScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 24,
-        backgroundColor: '#222',
+        backgroundColor: '#05060a',
+    },
+    listContent: {
+        padding: 16,
+        paddingBottom: 24,
+    },
+    loadingContainer: {
+        flex: 1,
+        backgroundColor: '#05060a',
+        alignItems: 'center',
         justifyContent: 'center',
     },
-    message: {
-        fontSize: 18,
-        color: '#999',
+    loadingText: {
+        marginTop: 12,
+        color: '#f1e9dc',
+        fontSize: 14,
+        letterSpacing: 1,
+    },
+    emptyContainer: {
+        flex: 1,
+        backgroundColor: '#05060a',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 32,
+    },
+    emptyTitle: {
+        fontSize: 20,
+        color: '#f1e9dc',
+        marginBottom: 8,
+        letterSpacing: 2,
+    },
+    emptyMessage: {
+        fontSize: 14,
+        color: '#9da6b8',
         textAlign: 'center',
     },
+    missionBox: {
+        backgroundColor: 'rgba(9, 12, 20, 0.95)',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 14,
+        borderWidth: 1,
+        borderColor: '#2e3547',
+        shadowColor: '#000',
+        shadowOpacity: 0.25,
+        shadowOffset: { width: 0, height: 8 },
+        shadowRadius: 14,
+    },
+    label: {
+        fontSize: 11,
+        color: '#ffb15e',
+        letterSpacing: 2,
+        marginBottom: 4,
+    },
     title: {
-        fontSize: 22,
+        fontSize: 18,
         fontWeight: 'bold',
-        color: '#fff',
+        color: '#f1e9dc',
+        marginBottom: 8,
+    },
+    description: {
+        fontSize: 14,
+        color: '#c6cedd',
         marginBottom: 12,
-        textAlign: 'left',
+    },
+    missionMeta: {
+        marginBottom: 12,
+    },
+    metaText: {
+        fontSize: 12,
+        color: '#7d8598',
     },
     missionDetails: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginTop: 10,
+        gap: 8,
     },
-    description: {
-        fontSize: 16,
-        color: '#ccc',
-        marginBottom: 24,
-        textAlign: 'center',
-    },
-    missionBox: {
-        backgroundColor: '#999',
-        padding: 16,
-        marginBottom: 12,
+    actionButton: {
+        flex: 1,
+        paddingVertical: 10,
         borderRadius: 10,
+        alignItems: 'center',
+        backgroundColor: '#ffb15e',
+    },
+    actionButtonSecondary: {
+        backgroundColor: '#2a3040',
+    },
+    actionButtonDanger: {
+        backgroundColor: '#7f2635',
+    },
+    actionButtonText: {
+        color: '#05060a',
+        fontWeight: '700',
+        fontSize: 13,
+        letterSpacing: 1,
     },
 });

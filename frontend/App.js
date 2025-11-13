@@ -109,7 +109,7 @@ function Root() {
                     }}
                 >
                     <Tab.Screen
-                        name="MAP"
+                        name="Map"
                         component={MapStack}
                         options={{
                             tabBarIcon: ({ color, size }) => (
@@ -119,7 +119,7 @@ function Root() {
                         }}
                     />
                     <Tab.Screen
-                        name="AGENT PROFILE"
+                        name="Agent Profile"
                         component={AgentProfileStack}
                         options={{
                             tabBarIcon: ({ color, size }) => (
@@ -128,7 +128,7 @@ function Root() {
                         }}
                     />
                     <Tab.Screen
-                        name="ACTIVE MISSIONS"
+                        name="Active Missions"
                         component={ActiveMissionsStack}
                         options={{
                             tabBarIcon: ({ color, size }) => (
