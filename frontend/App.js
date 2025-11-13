@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useFonts } from 'expo-font';
 
 import LoginScreen from './LoginScreen';
 import MapScreen from './MapScreen';
@@ -147,6 +148,14 @@ function Root() {
 }
 
 export default function App() {
+    const [fontsLoaded] = useFonts({
+        LaDistorsionada: require('./assets/fonts/LaDistorsionada-Regular.otf'),
+    });
+
+    if (!fontsLoaded) {
+        return null;
+    }
+
     return (
         <UserProvider>
             <Root />
