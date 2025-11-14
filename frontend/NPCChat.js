@@ -3,12 +3,12 @@ import {
     View,
     Text,
     TextInput,
-    Button,
     StyleSheet,
     FlatList,
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
+    TouchableOpacity,
 } from 'react-native';
 import { supabase } from './supabaseClient';
 import { useUser } from './UserContext';
@@ -119,7 +119,14 @@ export default function NPCChat({ route }) {
         }
     };
 
-    if (loading) return <ActivityIndicator style={{ flex: 1 }} size="large" color="#fff" />;
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#ffb15e" />
+                <Text style={styles.loadingText}>Establishing secure channel…</Text>
+            </View>
+        );
+    }
 
     return (
         <KeyboardAvoidingView
@@ -128,8 +135,13 @@ export default function NPCChat({ route }) {
             keyboardVerticalOffset={80}
         >
             <View style={styles.headerContainer}>
-                <Text style={styles.missionTitle}>{missionTitle}</Text>
-                <Text style={styles.npcName}>Handler: {npc?.name || "..."}</Text>
+                <Text style={styles.headerLabel}>CONTRACT</Text>
+                <Text style={styles.missionTitle} numberOfLines={1}>
+                    {missionTitle || 'Unknown operation'}
+                </Text>
+                <Text style={styles.npcName}>
+                    Handler: <Text style={styles.npcNameStrong}>{npc?.name || "..."}</Text>
+                </Text>
             </View>
 
             <FlatList
@@ -138,32 +150,53 @@ export default function NPCChat({ route }) {
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => {
                     const isAnimating = item.from === 'npc' && item.id === lastAnimatedId;
+                    const isNpc = item.from === 'npc';
+
                     return (
                         <View
                             style={[
-                                styles.bubble,
-                                item.from === 'npc' ? styles.npcBubble : styles.playerBubble,
+                                styles.bubbleRow,
+                                isNpc ? styles.bubbleRowNpc : styles.bubbleRowPlayer,
                             ]}
                         >
-                            {item.from === 'npc' && isAnimating ? (
-                                <TypewriterText
-                                    content={item.text}
-                                    speed={30}
-                                    style={styles.bubbleText}
-                                    onTypingComplete={() => {
-                                        setLastAnimatedId(null);
-                                        flatListRef.current?.scrollToEnd({ animated: true });
-                                    }}
-                                />
-                            ) : (
-                                <Text style={styles.bubbleText}>{item.text}</Text>
-                            )}
+                            <View
+                                style={[
+                                    styles.bubble,
+                                    isNpc ? styles.npcBubble : styles.playerBubble,
+                                ]}
+                            >
+                                {isNpc && (
+                                    <Text style={styles.bubbleMeta}>
+                                        {npc?.name || 'Handler'}
+                                    </Text>
+                                )}
+                                {!isNpc && (
+                                    <Text style={styles.bubbleMeta}>
+                                        You
+                                    </Text>
+                                )}
+
+                                {isNpc && isAnimating ? (
+                                    <TypewriterText
+                                        content={item.text}
+                                        speed={30}
+                                        style={styles.bubbleText}
+                                        onTypingComplete={() => {
+                                            setLastAnimatedId(null);
+                                            flatListRef.current?.scrollToEnd({ animated: true });
+                                        }}
+                                    />
+                                ) : (
+                                    <Text style={styles.bubbleText}>{item.text}</Text>
+                                )}
+                            </View>
                         </View>
                     );
                 }}
                 onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
                 onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-                contentContainerStyle={{ padding: 12 }}
+                contentContainerStyle={styles.listContent}
+                keyboardShouldPersistTaps="handled"
             />
 
             <View style={styles.inputRow}>
@@ -171,10 +204,12 @@ export default function NPCChat({ route }) {
                     style={styles.input}
                     value={input}
                     onChangeText={setInput}
-                    placeholder="Type your message..."
-                    placeholderTextColor="#888"
+                    placeholder="Type your message…"
+                    placeholderTextColor="#6f7485"
                 />
-                <Button title="Send" onPress={sendMessage} />
+                <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
+                    <Text style={styles.sendButtonText}>SEND</Text>
+                </TouchableOpacity>
             </View>
         </KeyboardAvoidingView>
     );
@@ -183,64 +218,127 @@ export default function NPCChat({ route }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0b0b0b',
+        backgroundColor: '#05060a',
+    },
+    loadingContainer: {
+        flex: 1,
+        backgroundColor: '#05060a',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadingText: {
+        marginTop: 12,
+        color: '#f1e9dc',
+        fontSize: 14,
+        letterSpacing: 1,
     },
     headerContainer: {
-        paddingTop: 48,
-        paddingBottom: 12,
+        paddingTop: 16,
+        paddingBottom: 10,
         paddingHorizontal: 16,
         borderBottomWidth: 1,
-        borderColor: '#222',
-        backgroundColor: '#000',
+        borderColor: '#2e3547',
+        backgroundColor: '#090c14',
         shadowColor: '#000',
         shadowOpacity: 0.3,
-        shadowRadius: 4,
+        shadowRadius: 6,
         shadowOffset: { height: 2, width: 0 },
         elevation: 3,
     },
+    headerLabel: {
+        fontSize: 11,
+        letterSpacing: 2,
+        color: '#ffb15e',
+        marginBottom: 4,
+    },
     missionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#fff',
-        letterSpacing: 0.5,
+        fontSize: 17,
+        fontWeight: '600',
+        color: '#f1e9dc',
     },
     npcName: {
-        fontSize: 14,
-        color: '#999',
+        fontSize: 13,
+        color: '#9da6b8',
         marginTop: 2,
     },
-    inputRow: {
-        flexDirection: 'row',
-        padding: 12,
-        borderTopWidth: 1,
-        borderColor: '#222',
-        backgroundColor: '#000',
+    npcNameStrong: {
+        color: '#f1e9dc',
+        fontWeight: '600',
     },
-    input: {
-        flex: 1,
-        backgroundColor: '#1a1a1a',
-        color: '#fff',
-        borderRadius: 8,
+    listContent: {
         paddingHorizontal: 12,
-        marginRight: 8,
+        paddingTop: 12,
+        paddingBottom: 8,
+    },
+    bubbleRow: {
+        marginBottom: 8,
+        flexDirection: 'row',
+    },
+    bubbleRowNpc: {
+        justifyContent: 'flex-start',
+    },
+    bubbleRowPlayer: {
+        justifyContent: 'flex-end',
     },
     bubble: {
-        marginBottom: 8,
         maxWidth: '80%',
         padding: 10,
-        borderRadius: 12,
+        borderRadius: 14,
     },
     npcBubble: {
-        backgroundColor: '#333',
+        backgroundColor: 'rgba(22, 27, 40, 0.95)',
+        borderWidth: 1,
+        borderColor: '#2e3547',
         alignSelf: 'flex-start',
     },
     playerBubble: {
-        backgroundColor: '#007AFF',
+        backgroundColor: '#ffb15e',
+        borderWidth: 1,
+        borderColor: '#ffb15e',
         alignSelf: 'flex-end',
     },
+    bubbleMeta: {
+        fontSize: 11,
+        marginBottom: 2,
+        color: '#9da6b8',
+    },
     bubbleText: {
-        color: '#fff',
+        color: '#f1f1f5',
         fontSize: 15,
         lineHeight: 20,
     },
+    inputRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderTopWidth: 1,
+        borderColor: '#2e3547',
+        backgroundColor: '#090c14',
+        alignItems: 'center',
+    },
+    input: {
+        flex: 1,
+        backgroundColor: '#111522',
+        color: '#f1e9dc',
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+        marginRight: 8,
+        fontSize: 14,
+    },
+    sendButton: {
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 10,
+        backgroundColor: '#ffb15e',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    sendButtonText: {
+        color: '#151821',
+        fontWeight: '700',
+        fontSize: 13,
+        letterSpacing: 1,
+    },
 });
+
